@@ -2,6 +2,8 @@
 
 use yew::prelude::*;
 
+use crate::components::login::{LoginButton, LoginStatus, LogoutButton};
+
 #[derive(Clone, Properties, Default, PartialEq, Eq)]
 pub struct AvatarProps {
     pub name: String,
@@ -31,7 +33,7 @@ pub fn user_avatar(props: &AvatarProps) -> Html {
         let hash = format!("{:x}", md5::compute(email.as_bytes()));
         html! {
             <figure class={"image is-48x48"}>
-                <img class={"is-rounded"} src={format!("https://www.gravatar.com/avatar/{}", hash)} />
+                <img class={"is-rounded"} style={"max-height: inherit;"} src={format!("https://www.gravatar.com/avatar/{}", hash)} />
             </figure>
         }
     } else {
@@ -41,5 +43,34 @@ pub fn user_avatar(props: &AvatarProps) -> Html {
                 <span class={"is-lowercase subtitle is-4"}>{initials}</span>
             </figure>
         }
+    }
+}
+
+#[function_component(UserMenuNavbarItem)]
+pub fn user_menu_button() -> Html {
+    match use_context::<LoginStatus>().expect("Unable to retrieve login status") {
+        LoginStatus::Unknown => html! {},
+        LoginStatus::LoggedOut => html! {
+            <div class={"navbar-item"}>
+                <div class={"buttons"}>
+                    <LoginButton />
+                </div>
+            </div>
+        },
+        LoginStatus::LoggedIn { name, email } => html! {
+            <div class={"navbar-item has-dropdown is-hoverable"}>
+                <a class={"navbar-link"}>
+                    <Avatar name={name} email={email} />
+                </a>
+
+                <div class={"navbar-dropdown"}>
+                    <div class={"navbar-item"}>
+                        <div class={"buttons"}>
+                            <LogoutButton />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        },
     }
 }

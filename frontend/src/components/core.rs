@@ -4,6 +4,8 @@
 
 use crate::Route;
 
+use crate::components::user::UserMenuNavbarItem;
+
 use reqwest::Url;
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -47,12 +49,8 @@ pub fn core_page_navbar() -> Html {
                 </div>
 
                 <div class={"navbar-end"}>
+                    <UserMenuNavbarItem />
                     <div class={"navbar-item"}>
-                        <div class={"buttons"}>
-                            <a class={"button is-primary"}>
-                                <strong>{"Something"}</strong>
-                            </a>
-                        </div>
                     </div>
                 </div>
             </div>
