@@ -1,16 +1,18 @@
-use linkdoku_common::{LoginFlowStart, LoginStatus};
+use linkdoku_common::{LoginFlowResult, LoginFlowStart};
 use reqwest::{StatusCode, Url};
 use serde::Deserialize;
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
 
-#[derive(Debug, Clone, PartialEq)]
-struct AppGlobals {
-    first_load: bool,
-    login_status: LoginStatus,
-    update_login_status: Callback<()>,
-}
+mod components;
+
+use components::core::{BaseURIProvider, Footer, Navbar};
+use components::login::{LoginStatus, UserProvider};
+use components::user::Avatar;
+
+use crate::components::core::use_api_url;
+use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
 
 #[derive(Routable, PartialEq, Clone)]
 enum Route {
@@ -25,47 +27,16 @@ enum Route {
 
 #[function_component(Root)]
 fn app_root() -> Html {
-    let ctx = use_state(|| LoginStatus {
-        display_name: None,
-        email_address: None,
-    });
-    let first_load = use_state(|| true);
-    let globals = AppGlobals {
-        first_load: *first_load,
-        login_status: (*ctx).clone(),
-        update_login_status: {
-            let ctx = ctx.clone();
-            Callback::from(move |_| {
-                let ctx = ctx.clone();
-                wasm_bindgen_futures::spawn_local(async move {
-                    let status: LoginStatus =
-                        reqwest::get("http://localhost:3000/api/login/status")
-                            .await
-                            .unwrap()
-                            .json()
-                            .await
-                            .unwrap();
-                    ctx.setter().set(status);
-                });
-            })
-        },
-    };
-
-    if globals.first_load {
-        let emitter = globals.update_login_status.clone();
-        use_effect(move || {
-            first_load.setter().set(false);
-            emitter.emit(());
-            || ()
-        });
-    }
-
     html! {
-       <ContextProvider<AppGlobals> context={globals}>
-          <BrowserRouter>
-            <Switch<Route> render={Switch::render(switch)} />
-          </BrowserRouter>
-       </ContextProvider<AppGlobals>>
+        <BaseURIProvider>
+            <UserProvider>
+                <BrowserRouter>
+                    <Navbar />
+                    <Switch<Route> render={Switch::render(switch)} />
+                    <Footer />
+                </BrowserRouter>
+            </UserProvider>
+        </BaseURIProvider>
     }
 }
 
@@ -82,9 +53,11 @@ fn login_flow() -> Html {
     let location = use_location().expect("Not able to get router location");
     let query: FlowContinuation = location.query().expect("Not able to get query string");
 
-    let globals = use_context::<AppGlobals>().expect("No global context found");
+    let login_status = use_context::<LoginStatus>().expect("No login status?");
+    let login_status_dispatch =
+        use_context::<LoginStatusDispatcher>().expect("No login status dispatcher?");
 
-    if globals.first_load {
+    if login_status == LoginStatus::Unknown {
         return html! {
             "Please wait, loading site"
         };
@@ -92,11 +65,10 @@ fn login_flow() -> Html {
 
     if query.code.is_none() || query.error.is_some() {
         // We had an error, so we should clear things and return to root
+        let clear_url = use_api_url("/login/clear");
         use_effect(move || {
             wasm_bindgen_futures::spawn_local(async move {
-                reqwest::get("http://localhost:3000/api/login/clear")
-                    .await
-                    .expect("Should be fine!");
+                reqwest::get(clear_url).await.expect("Should be fine!");
                 history.push(Route::Root);
             });
             || ()
@@ -107,7 +79,7 @@ fn login_flow() -> Html {
     }
 
     let continuation_url = Url::parse_with_params(
-        "http://localhost:3000/api/login/continue",
+        use_api_url("/login/continue").as_str(),
         &[
             ("state", query.state.clone()),
             ("code", query.code.as_ref().unwrap().to_string()),
@@ -116,23 +88,43 @@ fn login_flow() -> Html {
     .expect("Unable to construct continuation URL");
 
     gloo::console::log!("Setting up a callback for continuation");
+    let login_status_url = use_api_url("/login/status");
     use_effect_with_deps(
         {
-            move |continuation_url: &Url| {
+            move |(continuation_url, dispatcher): &(Url, LoginStatusDispatcher)| {
                 let continuation_url = continuation_url.clone();
+                let dispatcher = dispatcher.clone();
                 wasm_bindgen_futures::spawn_local(async move {
                     gloo::console::log!("Running continuation callback");
-                    reqwest::get(continuation_url)
+                    let result: LoginFlowResult = reqwest::get(continuation_url)
                         .await
-                        .expect("Unable to fetch API call");
-                    gloo::console::log!("Navigating to root");
+                        .expect("Unable to fetch API call")
+                        .json()
+                        .await
+                        .expect("Unable to unpack json");
+                    if let Some(_error) = result.error {
+                        // Error while trying to retrieve login results, so say we're logged out
+                        dispatcher.dispatch(LoginStatusAction::LoggedOut);
+                    } else {
+                        // Success, so retrieve the login status info
+                        let status: linkdoku_common::LoginStatus = reqwest::get(login_status_url)
+                            .await
+                            .expect("Unable to do API call")
+                            .json()
+                            .await
+                            .expect("Unable to unpack json");
+                        if let (Some(name), email) = (status.display_name, status.email_address) {
+                            dispatcher.dispatch(LoginStatusAction::LoggedIn(name, email));
+                        } else {
+                            dispatcher.dispatch(LoginStatusAction::LoggedOut);
+                        }
+                    }
                     history.push(Route::Root);
-                    globals.update_login_status.emit(());
                 });
                 || ()
             }
         },
-        continuation_url,
+        (continuation_url, login_status_dispatch),
     );
 
     html! {
@@ -164,12 +156,14 @@ fn switch(route: &Route) -> Html {
 #[function_component(LoginButton)]
 fn login_button() -> Html {
     let history = use_history().unwrap();
+    let start_google = use_api_url("/login/start/google");
     let login_click = Callback::from(move |_| {
         // User clicked login, so we need to redirect the user to the login flow
         // startup
         let history = history.clone();
+        let start_google = start_google.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            let response = reqwest::get("http://localhost:3000/api/login/start/google")
+            let response = reqwest::get(start_google)
                 .await
                 .expect("Unable to make call");
             if response.status() != StatusCode::OK {
@@ -199,17 +193,18 @@ fn login_button() -> Html {
 
 #[function_component(LogoutButton)]
 fn logout_button() -> Html {
-    let globals = use_context::<AppGlobals>().expect("No global context found");
+    let login_status_dispatch =
+        use_context::<LoginStatusDispatcher>().expect("Cannot get login status dispatcher");
     let history = use_history().unwrap();
+    let clear_login = use_api_url("/login/clear");
     let logout_click = Callback::from(move |_| {
         let history = history.clone();
-        let emitter = globals.update_login_status.clone();
+        let login_status_dispatch = login_status_dispatch.clone();
+        let clear_login = clear_login.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            reqwest::get("http://localhost:3000/api/login/clear")
-                .await
-                .unwrap();
+            reqwest::get(clear_login).await.unwrap();
             history.push(Route::Root);
-            emitter.emit(());
+            login_status_dispatch.dispatch(LoginStatusAction::LoggedOut);
         });
     });
     html! {
@@ -221,32 +216,37 @@ fn logout_button() -> Html {
 
 #[function_component(LoginStateShow)]
 fn show_login_state() -> Html {
-    let globals = use_context::<AppGlobals>().expect("No global context found");
-
-    if let Some(name) = globals.login_status.display_name.as_ref() {
-        html! {
-            <div>
-                {format!("Your name is: {}", name)}
+    let login_status = use_context::<LoginStatus>().expect("Cannot get login status");
+    match login_status {
+        LoginStatus::Unknown => html! {},
+        LoginStatus::LoggedOut => {
+            html! {
+                <div> {"You are not logged in!"}
                 <br />
-                {if let Some(addr) = globals.login_status.email_address.as_ref() {
-                    html!{
-                        <>
-                        {format!("Your email is: {}", addr)}
-                        <br />
-                        </>
-                    }
-                } else {
-                    html! {}
-                }}
-                <LogoutButton />
-            </div>
+                <LoginButton />
+                </div>
+            }
         }
-    } else {
-        html! {
-            <div> {"You are not logged in!"}
-            <br />
-            <LoginButton />
-            </div>
+        LoginStatus::LoggedIn { name, email } => {
+            html! {
+                <div>
+                    {format!("Your name is: {}", name)}
+                    <br />
+                    {if let Some(addr) = email.as_ref() {
+                        html!{
+                            <>
+                            {format!("Your email is: {}", addr)}
+                            <br />
+                            </>
+                        }
+                    } else {
+                        html! {}
+                    }}
+                    <br />
+                    <Avatar name={name.clone()} email={email} />
+                    <LogoutButton />
+                </div>
+            }
         }
     }
 }
