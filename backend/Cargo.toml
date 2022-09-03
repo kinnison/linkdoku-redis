@@ -6,3 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+axum = "0.5"
+tokio = { version = "1.20", features = ["full"] }
+tower-http = { version = "0.3", features = ["fs", "trace"] }
+tower-cookies = { version = "0.7", features = ["private"] }
+linkdoku-common = { path = "../common" }
+tracing-subscriber = "0.3"
+openidconnect = "2.3"
+lazy_static = "1.4"
+tracing = "0.1.36"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+cookie = "0.16"
