@@ -1,4 +1,4 @@
-use linkdoku_common::LoginFlowResult;
+use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
 use yew::prelude::*;
@@ -106,16 +106,19 @@ fn login_flow() -> Html {
                         dispatcher.dispatch(LoginStatusAction::LoggedOut);
                     } else {
                         // Success, so retrieve the login status info
-                        let status: linkdoku_common::LoginStatus = reqwest::get(login_status_url)
+                        let status: BackendLoginStatus = reqwest::get(login_status_url)
                             .await
                             .expect("Unable to do API call")
                             .json()
                             .await
                             .expect("Unable to unpack json");
-                        if let (Some(name), email) = (status.display_name, status.email_address) {
-                            dispatcher.dispatch(LoginStatusAction::LoggedIn(name, email));
-                        } else {
-                            dispatcher.dispatch(LoginStatusAction::LoggedOut);
+                        match status {
+                            BackendLoginStatus::LoggedOut => {
+                                dispatcher.dispatch(LoginStatusAction::LoggedOut);
+                            }
+                            BackendLoginStatus::LoggedIn { name, email } => {
+                                dispatcher.dispatch(LoginStatusAction::LoggedIn(name, email));
+                            }
                         }
                     }
                     history.push(Route::Root);

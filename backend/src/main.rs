@@ -2,13 +2,13 @@ use axum::{
     http::StatusCode,
     response::Redirect,
     routing::{get, get_service},
-    Json, Router,
+    Router,
 };
-use linkdoku_common::LoginStatus;
+
 use tower_cookies::CookieManagerLayer;
 use tower_http::{
     services::{ServeDir, ServeFile},
-    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
+    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     LatencyUnit,
 };
 use tracing::Level;

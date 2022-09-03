@@ -2,6 +2,7 @@
 
 use std::rc::Rc;
 
+use linkdoku_common::BackendLoginStatus;
 use linkdoku_common::LoginFlowStart;
 use reqwest::StatusCode;
 use yew::prelude::*;
@@ -54,17 +55,19 @@ pub fn login_user_provider(props: &UserProviderProps) -> Html {
             let dispatcher = state.dispatcher();
             || {
                 wasm_bindgen_futures::spawn_local(async move {
-                    let status: linkdoku_common::LoginStatus = reqwest::get(status_url)
+                    let status: BackendLoginStatus = reqwest::get(status_url)
                         .await
                         .unwrap()
                         .json()
                         .await
                         .unwrap();
-                    if let (Some(display_name), email) = (status.display_name, status.email_address)
-                    {
-                        dispatcher.dispatch(LoginStatusAction::LoggedIn(display_name, email))
-                    } else {
-                        dispatcher.dispatch(LoginStatusAction::LoggedOut)
+                    match status {
+                        BackendLoginStatus::LoggedOut => {
+                            dispatcher.dispatch(LoginStatusAction::LoggedOut);
+                        }
+                        BackendLoginStatus::LoggedIn { name, email } => {
+                            dispatcher.dispatch(LoginStatusAction::LoggedIn(name, email));
+                        }
                     }
                 });
                 // No destructor

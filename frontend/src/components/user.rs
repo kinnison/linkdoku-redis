@@ -32,14 +32,14 @@ pub fn user_avatar(props: &AvatarProps) -> Html {
         let email = email.trim();
         let hash = format!("{:x}", md5::compute(email.as_bytes()));
         html! {
-            <figure class={"image is-48x48"}>
+            <figure class={"image is-32x32"}>
                 <img class={"is-rounded"} style={"max-height: inherit;"} src={format!("https://www.gravatar.com/avatar/{}", hash)} />
             </figure>
         }
     } else {
         // No email, so we need to get some initials together
         html! {
-            <figure class={"image is-48x48 has-text-centered"}>
+            <figure class={"image is-32x32 has-text-centered"}>
                 <span class={"is-lowercase subtitle is-4"}>{initials}</span>
             </figure>
         }

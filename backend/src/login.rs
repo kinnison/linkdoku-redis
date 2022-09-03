@@ -18,13 +18,12 @@ use std::collections::HashMap;
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    response::{IntoResponse, Redirect, Response},
     routing::get,
     Json, Router,
 };
 use cookie::SameSite;
 use lazy_static::lazy_static;
-use linkdoku_common::{LoginFlowResult, LoginFlowStart, LoginStatus};
+use linkdoku_common::{BackendLoginStatus, LoginFlowResult, LoginFlowStart};
 use openidconnect::{
     core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata},
     reqwest::async_http_client,
@@ -308,18 +307,15 @@ async fn handle_login_continue(
     }
 }
 
-async fn handle_login_status(cookies: Cookies) -> Json<LoginStatus> {
+async fn handle_login_status(cookies: Cookies) -> Json<BackendLoginStatus> {
     let flow = login_flow_status(&cookies);
     if let Some(data) = flow.user {
-        Json::from(LoginStatus {
-            display_name: data.name.or(Some(data.subject)),
-            email_address: data.email,
+        Json::from(BackendLoginStatus::LoggedIn {
+            name: data.name.unwrap_or(data.subject),
+            email: data.email,
         })
     } else {
-        Json::from(LoginStatus {
-            display_name: None,
-            email_address: None,
-        })
+        Json::from(BackendLoginStatus::LoggedOut)
     }
 }
 

@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LoginStatus {
-    pub display_name: Option<String>,
-    pub email_address: Option<String>,
+pub enum BackendLoginStatus {
+    LoggedOut,
+    LoggedIn { name: String, email: Option<String> },
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoginFlowStart {
     Idle,
