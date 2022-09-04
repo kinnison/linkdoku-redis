@@ -795,6 +795,8 @@ dependencies = [
  "md5",
  "reqwest",
  "serde",
+ "thiserror",
+ "url",
  "wasm-bindgen-futures",
  "yew",
  "yew-router",
