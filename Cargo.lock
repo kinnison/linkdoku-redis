@@ -790,14 +790,18 @@ dependencies = [
 name = "linkdoku-frontend"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "gloo",
  "linkdoku-common",
+ "lz-str",
  "md5",
  "reqwest",
  "serde",
+ "serde_json",
  "thiserror",
  "url",
  "wasm-bindgen-futures",
+ "web-sys",
  "yew",
  "yew-router",
 ]
@@ -820,6 +824,12 @@ checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "lz-str"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a081ef1e55c0f1fef4a0a0c48ad7a3acbc1a0f3881c27c090f8ed48156d5b8c"
 
 [[package]]
 name = "matches"
