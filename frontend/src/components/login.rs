@@ -4,14 +4,16 @@ use std::rc::Rc;
 
 use linkdoku_common::BackendLoginStatus;
 use linkdoku_common::LoginFlowStart;
-use reqwest::StatusCode;
 use yew::prelude::*;
 use yew::Reducible;
 use yew_router::prelude::*;
 
 use crate::Route;
 
+use super::core::make_api_call;
 use super::core::use_api_url;
+use super::core::ReqwestClient;
+use super::core::NO_BODY;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoginStatus {
@@ -48,6 +50,7 @@ pub type LoginStatusDispatcher = UseReducerDispatcher<LoginStatus>;
 pub fn login_user_provider(props: &UserProviderProps) -> Html {
     let state = use_reducer_eq(|| LoginStatus::Unknown);
     let status_url = use_api_url("/login/status");
+    let client = use_context::<ReqwestClient>().expect("No API client");
 
     // First time out of the gate, acquire the status
     if *state == LoginStatus::Unknown {
@@ -55,12 +58,10 @@ pub fn login_user_provider(props: &UserProviderProps) -> Html {
             let dispatcher = state.dispatcher();
             || {
                 wasm_bindgen_futures::spawn_local(async move {
-                    let status: BackendLoginStatus = reqwest::get(status_url)
-                        .await
-                        .unwrap()
-                        .json()
-                        .await
-                        .unwrap();
+                    let status: BackendLoginStatus =
+                        make_api_call(client, status_url.as_str(), None, NO_BODY)
+                            .await
+                            .expect("Unable to make API call");
                     match status {
                         BackendLoginStatus::LoggedOut => {
                             dispatcher.dispatch(LoginStatusAction::LoggedOut);
@@ -88,29 +89,26 @@ pub fn login_user_provider(props: &UserProviderProps) -> Html {
 #[function_component(LoginButton)]
 pub fn login_button() -> Html {
     let history = use_history().unwrap();
+    let client = use_context::<ReqwestClient>().expect("No API client");
     let start_google = use_api_url("/login/start/google");
     let login_click = Callback::from(move |_| {
         // User clicked login, so we need to redirect the user to the login flow
         // startup
         let history = history.clone();
         let start_google = start_google.clone();
+        let client = client.clone();
         wasm_bindgen_futures::spawn_local(async move {
-            let response = reqwest::get(start_google)
+            let res: LoginFlowStart = make_api_call(client, start_google.as_str(), None, NO_BODY)
                 .await
-                .expect("Unable to make call");
-            if response.status() != StatusCode::OK {
-                // some kind of error
-            } else {
-                let res: LoginFlowStart = response.json().await.unwrap();
-                match res {
-                    LoginFlowStart::Idle => history.push(Route::Root),
-                    LoginFlowStart::Redirect(url) => {
-                        gloo::utils::window().location().set_href(&url).unwrap();
-                    }
-                    LoginFlowStart::Error(err) => {
-                        gloo::console::log!("Failure doing login? {}", err);
-                        history.push(Route::Root);
-                    }
+                .expect("Unable to start login");
+            match res {
+                LoginFlowStart::Idle => history.push(Route::Root),
+                LoginFlowStart::Redirect(url) => {
+                    gloo::utils::window().location().set_href(&url).unwrap();
+                }
+                LoginFlowStart::Error(err) => {
+                    gloo::console::log!("Failure doing login? {}", err);
+                    history.push(Route::Root);
                 }
             }
         });

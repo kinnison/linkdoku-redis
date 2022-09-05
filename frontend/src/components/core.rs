@@ -2,11 +2,15 @@
 //!
 //!
 
+use std::sync::Arc;
+
 use crate::Route;
 
 use crate::components::user::UserMenuNavbarItem;
 
-use reqwest::Url;
+use reqwest::{Client, Url};
+use serde::{de::DeserializeOwned, Serialize};
+use thiserror::Error;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -68,6 +72,17 @@ pub struct BaseURIProviderProps {
     pub children: Children,
 }
 
+#[derive(Debug, Clone)]
+pub struct ReqwestClient {
+    client: Arc<Client>,
+}
+
+impl PartialEq for ReqwestClient {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.client, &other.client)
+    }
+}
+
 #[function_component(BaseURIProvider)]
 pub fn core_base_uri_provider(props: &BaseURIProviderProps) -> Html {
     let uri = use_state(|| {
@@ -80,11 +95,21 @@ pub fn core_base_uri_provider(props: &BaseURIProviderProps) -> Html {
         BaseURI { base: uri }
     });
 
+    let client = use_state(|| ReqwestClient {
+        client: Arc::new(
+            Client::builder()
+                .build()
+                .expect("Unable to construct client"),
+        ),
+    });
+
     let children = props.children.clone();
 
     html! {
         <ContextProvider<BaseURI> context={(*uri).clone()}>
-            {children}
+            <ContextProvider<ReqwestClient> context={(*client).clone()}>
+                {children}
+            </ContextProvider<ReqwestClient>>
         </ContextProvider<BaseURI>>
     }
 }
@@ -102,4 +127,39 @@ pub fn use_api_url(api: &str) -> Url {
     ret.set_fragment(None);
     ret.set_query(None);
     ret
+}
+
+pub const NO_BODY: Option<()> = None;
+
+#[derive(Error, Debug)]
+pub enum APIError {
+    #[error("URL Parse Error: {0}")]
+    URLParseError(#[from] url::ParseError),
+    #[error("Error with reqwest: {0}")]
+    ReqwestError(#[from] reqwest::Error),
+}
+
+/// Make an async API call.
+///
+/// You *must* have acquired the API Url already
+/// but you can specify additional query string
+/// or body here.
+pub async fn make_api_call<IN, OUT>(
+    client: ReqwestClient,
+    api: &str,
+    query_params: impl IntoIterator<Item = (&str, &str)>,
+    body: Option<IN>,
+) -> Result<OUT, APIError>
+where
+    IN: Serialize,
+    OUT: DeserializeOwned,
+{
+    let url = Url::parse_with_params(api, query_params)?;
+    let request = if let Some(body) = body {
+        client.client.post(url).json(&body).build()?
+    } else {
+        client.client.get(url).build()?
+    };
+    let response = client.client.execute(request).await?;
+    Ok(response.json().await?)
 }

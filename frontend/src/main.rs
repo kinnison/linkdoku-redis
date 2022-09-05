@@ -1,6 +1,7 @@
 use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
+use serde_json::Value;
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
@@ -19,6 +20,8 @@ enum Route {
     Root,
     #[at("/-/complete-login")]
     CompleteLogin,
+    #[at("/-/utils/lz")]
+    LZPage,
     #[not_found]
     #[at("/-/404")]
     NotFound,
@@ -152,6 +155,7 @@ fn switch(route: &Route) -> Html {
         Route::Root => html! { <LoginStateShow /> },
         Route::CompleteLogin => html! { <HandleLoginFlow /> },
         Route::NotFound => html! { <ShowNotFound /> },
+        Route::LZPage => html! { <LZPage /> },
     }
 }
 
@@ -184,6 +188,103 @@ fn show_login_state() -> Html {
                 </div>
             }
         }
+    }
+}
+
+#[function_component(LZPage)]
+fn show_lz_page() -> Html {
+    use web_sys::{HtmlInputElement, HtmlTextAreaElement};
+
+    let lz_input = use_node_ref();
+    let textarea = use_node_ref();
+
+    const DICTIONARY: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\\";
+
+    let decompress_action = {
+        let lz_input = lz_input.clone();
+        let textarea = textarea.clone();
+        Callback::from(move |_| {
+            if let (Some(input), Some(textarea)) = (
+                lz_input.cast::<HtmlInputElement>(),
+                textarea.cast::<HtmlTextAreaElement>(),
+            ) {
+                let input_str = input.value();
+                let nums: Vec<_> = input_str
+                    .bytes()
+                    .flat_map(|b| {
+                        DICTIONARY
+                            .iter()
+                            .enumerate()
+                            .find(|&v| *v.1 == b)
+                            .map(|v| v.0 as u32)
+                    })
+                    .collect();
+                if let Some(decomp) = lz_str::decompress(&nums, 6) {
+                    match serde_json::from_str::<Value>(&decomp) {
+                        Ok(v) => {
+                            let s =
+                                serde_json::to_string_pretty(&v).expect("Can't re-serialise JSON");
+                            textarea.set_value(&s);
+                        }
+                        Err(e) => {
+                            textarea.set_value(&format!(
+                                "Unable to read compressed JSON: {:?}\n\n'{}'",
+                                e, decomp
+                            ));
+                        }
+                    }
+                } else {
+                    textarea.set_value(&format!("Unable to decompress: {}", input.value()));
+                }
+            }
+        })
+    };
+
+    let compress_action = {
+        let lz_input = lz_input.clone();
+        let textarea = textarea.clone();
+        Callback::from(move |_| {
+            if let (Some(input), Some(textarea)) = (
+                lz_input.cast::<HtmlInputElement>(),
+                textarea.cast::<HtmlTextAreaElement>(),
+            ) {
+                match serde_json::from_str::<Value>(&textarea.value()) {
+                    Ok(v) => {
+                        let squished = serde_json::to_string(&v).unwrap();
+                        let compressed = lz_str::compress(&squished, 6, |v| {
+                            *DICTIONARY.get(v as usize).unwrap() as u32
+                        });
+                        let nums: String =
+                            compressed.into_iter().map(|v| v as u8 as char).collect();
+                        input.set_value(&nums);
+                    }
+                    Err(e) => {
+                        input.set_value(&format!("Unable to parse JSON: {:?}", e));
+                    }
+                }
+            }
+        })
+    };
+
+    html! {
+        <div class={"section"}>
+            <div class={"field"}>
+                <label class={"label"}>{"Compressed puzzle"}</label>
+                <div class={"control"}>
+                    <input class={"input"} type={"text"} placeholder={"f-puzzles style compressed input"} ref={lz_input}/>
+                </div>
+            </div>
+            <div class={"field"}>
+                <label class={"label"}>{"Uncompressed puzzle"}</label>
+                <div class={"control"}>
+                    <textarea class={"textarea"} placeholder={"uncompressed json output"} ref={textarea}></textarea>
+                </div>
+            </div>
+            <div class={"buttons"}>
+                <button class={"button"} onclick={decompress_action}>{"Decompress"}</button>
+                <button class={"button"} onclick={compress_action}>{"Compress"}</button>
+            </div>
+        </div>
     }
 }
 

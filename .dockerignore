@@ -1,0 +1,13 @@
+# Ignore all the hyooge things and the main content as unnecessary
+.git
+.direnv
+backend
+frontend
+common
+target
+Cargo.lock
+Cargo.toml
+*.md
+.gitignore
+.envrc
+shell.nix

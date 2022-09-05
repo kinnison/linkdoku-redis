@@ -17,14 +17,25 @@ async fn handle_root() -> Redirect {
     Redirect::to("/-/")
 }
 
+mod config;
 mod login;
 
 #[tokio::main]
 async fn main() {
+    let config = config::load_configuration().expect("Unable to load configuration");
+
+    println!("{:#?}", config);
+
+    let index_html = {
+        let mut p = config.resources.clone();
+        p.push("index.html");
+        p
+    };
+
     let frontend_service = get_service(
-        ServeDir::new("../frontend/dist")
+        ServeDir::new(&config.resources)
             .append_index_html_on_directories(true)
-            .fallback(ServeFile::new("../frontend/dist/index.html")),
+            .fallback(ServeFile::new(&index_html)),
     )
     .handle_error(|error| async move {
         (
@@ -50,10 +61,10 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
-    login::setup().await;
+    login::setup(&config).await;
 
     // run it with hyper on localhost:3000
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    axum::Server::bind(&format!("0.0.0.0:{}", config.port).parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();

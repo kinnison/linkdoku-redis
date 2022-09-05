@@ -36,6 +36,8 @@ use tokio::sync::Mutex;
 use tower_cookies::{Cookie, Cookies, Key};
 use tracing::instrument;
 
+use crate::config::Configuration;
+
 struct ProviderSetup {
     client_id: String,
     client_secret: String,
@@ -43,43 +45,33 @@ struct ProviderSetup {
     scopes: Vec<Scope>,
 }
 
-async fn load_providers(providers: &mut HashMap<String, ProviderSetup>) {
-    use std::env::var;
-    for name in ["google", "github"] {
-        tracing::info!("Checking for OIDC metadata for {}", name);
-        let upper_name = name.to_uppercase();
-        let provider_name = name.to_lowercase();
-        let client_id = var(format!("{}_CLIENT_ID", &upper_name)).ok();
-        let client_secret = var(format!("{}_CLIENT_SECRET", &upper_name)).ok();
-        let discover_url = var(format!("{}_DISCOVERY_DOC", &upper_name)).ok();
-        let scopes = var(format!("{}_SCOPES", &upper_name))
-            .ok()
-            .unwrap_or_else(|| "".to_string())
-            .split(',')
-            .map(String::from)
-            .map(Scope::new)
-            .collect::<Vec<_>>();
-
-        if let (Some(client_id), Some(client_secret), Some(discover_url)) =
-            (client_id, client_secret, discover_url)
-        {
-            let provider_metadata = CoreProviderMetadata::discover_async(
-                IssuerUrl::new(discover_url).unwrap(),
-                async_http_client,
-            )
-            .await;
-            if let Ok(provider_metadata) = provider_metadata {
-                tracing::info!("Loaded openid connect provider {}", provider_name);
-                providers.insert(
-                    provider_name,
-                    ProviderSetup {
-                        client_id,
-                        client_secret,
-                        provider_metadata,
-                        scopes,
-                    },
-                );
-            }
+async fn load_providers(providers: &mut HashMap<String, ProviderSetup>, config: &Configuration) {
+    for (name, oidp) in config.openid.iter() {
+        tracing::info!("Loading OIDC metdata for {} from config", name);
+        let provider_metadata = CoreProviderMetadata::discover_async(
+            IssuerUrl::new(oidp.discovery_doc.clone()).expect("Unable to grok discovery_doc url"),
+            async_http_client,
+        )
+        .await;
+        if let Ok(provider_metadata) = provider_metadata {
+            tracing::info!("Loaded openid connect provider {}", name);
+            let client_id = oidp.client_id.clone();
+            let client_secret = oidp.client_secret.clone();
+            let scopes = oidp
+                .scopes
+                .iter()
+                .map(String::clone)
+                .map(Scope::new)
+                .collect();
+            providers.insert(
+                name.to_lowercase(),
+                ProviderSetup {
+                    client_id,
+                    client_secret,
+                    provider_metadata,
+                    scopes,
+                },
+            );
         }
     }
 }
@@ -87,15 +79,7 @@ async fn load_providers(providers: &mut HashMap<String, ProviderSetup>) {
 lazy_static! {
     static ref REDIRECT_URL: Mutex<String> = Mutex::new(String::new());
     static ref PROVIDERS: Mutex<HashMap<String, ProviderSetup>> = Mutex::new(HashMap::new());
-    static ref LOGIN_KEY: Key = {
-        if let Ok(val) = std::env::var("COOKIE_SECRET") {
-            tracing::info!("Deriving login secret from environment");
-            Key::derive_from(val.as_bytes())
-        } else {
-            tracing::info!("Generating random login secret, you will struggle on restarts");
-            Key::generate()
-        }
-    };
+    static ref LOGIN_KEY: Mutex<Key> = Mutex::new(Key::generate());
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -120,10 +104,10 @@ struct LoginFlowStatus {
     user: Option<LoginFlowUserData>,
 }
 
-fn login_flow_status(cookies: &Cookies) -> LoginFlowStatus {
+async fn login_flow_status(cookies: &Cookies) -> LoginFlowStatus {
     serde_json::from_str(
         &cookies
-            .private(&*LOGIN_KEY)
+            .private(&*LOGIN_KEY.lock().await)
             .get("login")
             .map(|c| c.value().to_owned())
             .unwrap_or_default(),
@@ -131,8 +115,8 @@ fn login_flow_status(cookies: &Cookies) -> LoginFlowStatus {
     .unwrap_or_default()
 }
 
-fn set_login_flow_status(cookies: &Cookies, login: &LoginFlowStatus) {
-    cookies.private(&*LOGIN_KEY).add(
+async fn set_login_flow_status(cookies: &Cookies, login: &LoginFlowStatus) {
+    cookies.private(&*LOGIN_KEY.lock().await).add(
         Cookie::build(
             "login",
             serde_json::to_string(login).expect("Unable to serialise login"),
@@ -144,7 +128,7 @@ fn set_login_flow_status(cookies: &Cookies, login: &LoginFlowStatus) {
 }
 
 async fn start_auth(Path(provider): Path<String>, cookies: Cookies) -> Json<LoginFlowStart> {
-    let mut flow = login_flow_status(&cookies);
+    let mut flow = login_flow_status(&cookies).await;
     // First up, if we're already logged in, just redirect the user to the root of the app
     if flow.user.is_some() {
         return Json::from(LoginFlowStart::Idle);
@@ -187,7 +171,7 @@ async fn start_auth(Path(provider): Path<String>, cookies: Cookies) -> Json<Logi
 
         tracing::info!("Set up flow: {:?}", flow.flow);
 
-        set_login_flow_status(&cookies, &flow);
+        set_login_flow_status(&cookies, &flow).await;
 
         Json::from(LoginFlowStart::Redirect(url.to_string()))
     } else {
@@ -210,7 +194,7 @@ async fn handle_login_continue(
     cookies: Cookies,
     Query(params): Query<LoginContinueQuery>,
 ) -> Json<LoginFlowResult> {
-    let mut flow = login_flow_status(&cookies);
+    let mut flow = login_flow_status(&cookies).await;
     // First up, if we're already logged in, just redirect the user to the root of the app
     if flow.user.is_some() {
         return Json::from(LoginFlowResult { error: None });
@@ -220,7 +204,7 @@ async fn handle_login_continue(
         if params.state.as_ref() != Some(setup.csrf_token.secret()) {
             // State value is bad, so clean up and BAD_REQUEST
             flow.flow = None;
-            set_login_flow_status(&cookies, &flow);
+            set_login_flow_status(&cookies, &flow).await;
             return Json::from(LoginFlowResult {
                 error: Some("bad-state".to_string()),
             });
@@ -228,7 +212,7 @@ async fn handle_login_continue(
         if let Some(error) = params.error {
             tracing::error!("Error in flow: {}", error);
             flow.flow = None;
-            set_login_flow_status(&cookies, &flow);
+            set_login_flow_status(&cookies, &flow).await;
             return Json::from(LoginFlowResult { error: Some(error) });
         }
         let code = params.code.as_deref().unwrap();
@@ -252,7 +236,7 @@ async fn handle_login_continue(
                         None => {
                             tracing::error!("Failed to get id_token");
                             flow.flow = None;
-                            set_login_flow_status(&cookies, &flow);
+                            set_login_flow_status(&cookies, &flow).await;
                             return Json::from(LoginFlowResult {
                                 error: Some("no-id-token".to_string()),
                             });
@@ -263,7 +247,7 @@ async fn handle_login_continue(
                         Err(e) => {
                             tracing::error!("Failed to verify id_token: {:?}", e);
                             flow.flow = None;
-                            set_login_flow_status(&cookies, &flow);
+                            set_login_flow_status(&cookies, &flow).await;
                             return Json::from(LoginFlowResult {
                                 error: Some("bad-id-token".to_string()),
                             });
@@ -281,14 +265,14 @@ async fn handle_login_continue(
                         email,
                         name,
                     });
-                    set_login_flow_status(&cookies, &flow);
+                    set_login_flow_status(&cookies, &flow).await;
                     Json::from(LoginFlowResult { error: None })
                 }
                 Err(e) => {
                     // Failed to exchange the token, return something
                     tracing::error!("Failed exchanging codes: {:?}", e);
                     flow.flow = None;
-                    set_login_flow_status(&cookies, &flow);
+                    set_login_flow_status(&cookies, &flow).await;
                     Json::from(LoginFlowResult {
                         error: Some("code-exchange-failed".to_string()),
                     })
@@ -296,7 +280,7 @@ async fn handle_login_continue(
             }
         } else {
             flow.flow = None;
-            set_login_flow_status(&cookies, &flow);
+            set_login_flow_status(&cookies, &flow).await;
             Json::from(LoginFlowResult {
                 error: Some("bad-provider".to_string()),
             })
@@ -308,7 +292,7 @@ async fn handle_login_continue(
 }
 
 async fn handle_login_status(cookies: Cookies) -> Json<BackendLoginStatus> {
-    let flow = login_flow_status(&cookies);
+    let flow = login_flow_status(&cookies).await;
     if let Some(data) = flow.user {
         Json::from(BackendLoginStatus::LoggedIn {
             name: data.name.unwrap_or(data.subject),
@@ -320,20 +304,21 @@ async fn handle_login_status(cookies: Cookies) -> Json<BackendLoginStatus> {
 }
 
 async fn handle_clear_login(cookies: Cookies) -> StatusCode {
-    let mut flow = login_flow_status(&cookies);
+    let mut flow = login_flow_status(&cookies).await;
     flow.flow = None;
     flow.user = None;
-    set_login_flow_status(&cookies, &flow);
+    set_login_flow_status(&cookies, &flow).await;
     StatusCode::NO_CONTENT
 }
 
-#[instrument]
-pub async fn setup() {
+#[instrument(skip(config))]
+pub async fn setup(config: &Configuration) {
     let mut providers = PROVIDERS.lock().await;
     tracing::info!("Loading OIDC providers...");
-    load_providers(&mut providers).await;
+    load_providers(&mut providers, config).await;
     tracing::info!("Loaded {} providers", providers.len());
-    *(REDIRECT_URL.lock().await) = "http://localhost:3000/-/complete-login".to_string();
+    *(REDIRECT_URL.lock().await) = config.redirect_url.clone();
+    *(LOGIN_KEY.lock().await) = Key::derive_from(config.cookie_secret.as_bytes());
 }
 
 pub fn router() -> Router {

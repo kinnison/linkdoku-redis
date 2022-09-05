@@ -1,0 +1,15 @@
+version: "3.9"
+services:
+  devweb:
+    build: .
+    ports:
+      - 3000:3000
+    volumes:
+      - .:/code
+      - buildSpace:/build
+    depends_on:
+      - redis
+  redis:
+    image: redis
+volumes:
+  buildSpace: {}
