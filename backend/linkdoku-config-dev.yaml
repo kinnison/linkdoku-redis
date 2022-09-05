@@ -1,0 +1,28 @@
+# Development system configuration for Linkdoku
+# Note, nothing in this file is considered truly secret
+# For example, the google client and client secret will ONLY work for `http://localhost:3000`
+# so you won't be able to use it for anything interesting
+
+# The location of the frontend resources which are served from `/-`
+resources: "../frontend/dist"
+
+# The Cookie secret is used to AEAD the cookies which the client is not supposed
+# to be able to read/change.
+cookie_secret: "01234567890123456789012345678901"
+
+# Redirect URL for *all* OIDP setups is always the same:
+redirect_url: "http://localhost:3000/-/complete-login"
+
+# This OpenID provider setup is only for http://localhost:3000
+# You are welcome to use it when testing changes to the Linkdoku software.
+# If it stops working it's because someone was abusing it enough that we
+# recycled the secret etc. and you may need to set one up for yourself.
+openid:
+  google:
+    client_id: "739049102074-nbqhs8ss06d75o5lta70r01u5focufi5.apps.googleusercontent.com"
+    client_secret: "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"
+    # the OpenIDConnect crate automatically adds the .well-known/...
+    discovery_doc: "https://accounts.google.com"
+    scopes:
+      - profile
+      - email
