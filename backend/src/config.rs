@@ -17,6 +17,7 @@ pub struct OpenIDProvider {
 #[derive(Debug, Deserialize)]
 pub struct Configuration {
     pub resources: PathBuf,
+    pub port: u16,
     pub redirect_url: String,
     pub cookie_secret: String,
     pub openid: HashMap<String, OpenIDProvider>,
@@ -34,7 +35,6 @@ pub fn load_configuration() -> Result<Configuration, ConfigError> {
             Environment::default()
                 .prefix("LINKDOKU")
                 .separator("_")
-                .list_separator(",")
                 .try_parsing(true),
         );
 
