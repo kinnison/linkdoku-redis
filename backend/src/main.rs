@@ -18,6 +18,7 @@ async fn handle_root() -> Redirect {
 }
 
 mod config;
+mod dbconn;
 mod login;
 
 #[tokio::main]
@@ -57,6 +58,11 @@ async fn main() {
                         .level(Level::INFO)
                         .latency_unit(LatencyUnit::Millis),
                 ),
+        )
+        .layer(
+            dbconn::redis_layer(&config)
+                .await
+                .expect("Unable to establish Redis connection"),
         );
 
     tracing_subscriber::fmt::init();

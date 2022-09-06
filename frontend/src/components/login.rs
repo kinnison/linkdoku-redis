@@ -19,7 +19,10 @@ use super::core::NO_BODY;
 pub enum LoginStatus {
     Unknown,
     LoggedOut,
-    LoggedIn { name: String, email: Option<String> },
+    LoggedIn {
+        name: String,
+        gravatar_hash: Option<String>,
+    },
 }
 
 pub enum LoginStatusAction {
@@ -33,7 +36,10 @@ impl Reducible for LoginStatus {
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
         match action {
             LoginStatusAction::LoggedOut => LoginStatus::LoggedOut,
-            LoginStatusAction::LoggedIn(name, email) => LoginStatus::LoggedIn { name, email },
+            LoginStatusAction::LoggedIn(name, gravatar_hash) => LoginStatus::LoggedIn {
+                name,
+                gravatar_hash,
+            },
         }
         .into()
     }
@@ -66,8 +72,11 @@ pub fn login_user_provider(props: &UserProviderProps) -> Html {
                         BackendLoginStatus::LoggedOut => {
                             dispatcher.dispatch(LoginStatusAction::LoggedOut);
                         }
-                        BackendLoginStatus::LoggedIn { name, email } => {
-                            dispatcher.dispatch(LoginStatusAction::LoggedIn(name, email));
+                        BackendLoginStatus::LoggedIn {
+                            name,
+                            gravatar_hash,
+                        } => {
+                            dispatcher.dispatch(LoginStatusAction::LoggedIn(name, gravatar_hash));
                         }
                     }
                 });

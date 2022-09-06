@@ -119,8 +119,12 @@ fn login_flow() -> Html {
                             BackendLoginStatus::LoggedOut => {
                                 dispatcher.dispatch(LoginStatusAction::LoggedOut);
                             }
-                            BackendLoginStatus::LoggedIn { name, email } => {
-                                dispatcher.dispatch(LoginStatusAction::LoggedIn(name, email));
+                            BackendLoginStatus::LoggedIn {
+                                name,
+                                gravatar_hash,
+                            } => {
+                                dispatcher
+                                    .dispatch(LoginStatusAction::LoggedIn(name, gravatar_hash));
                             }
                         }
                     }
@@ -170,21 +174,10 @@ fn show_login_state() -> Html {
                 </div>
             }
         }
-        LoginStatus::LoggedIn { name, email } => {
+        LoginStatus::LoggedIn { name, .. } => {
             html! {
                 <div>
                     {format!("Your name is: {}", name)}
-                    <br />
-                    {if let Some(addr) = email.as_ref() {
-                        html!{
-                            <>
-                            {format!("Your email is: {}", addr)}
-                            <br />
-                            </>
-                        }
-                    } else {
-                        html! {}
-                    }}
                 </div>
             }
         }

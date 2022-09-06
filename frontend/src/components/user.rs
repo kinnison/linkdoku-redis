@@ -7,7 +7,7 @@ use crate::components::login::{LoginButton, LoginStatus, LogoutButton};
 #[derive(Clone, Properties, Default, PartialEq, Eq)]
 pub struct AvatarProps {
     pub name: String,
-    pub email: Option<String>,
+    pub gravatar_hash: Option<String>,
 }
 
 #[function_component(Avatar)]
@@ -27,10 +27,8 @@ pub fn user_avatar(props: &AvatarProps) -> Html {
         }
     };
 
-    if let Some(email) = props.email.as_deref() {
+    if let Some(hash) = props.gravatar_hash.as_deref() {
         // Email provided, so try and do a gravatar
-        let email = email.trim();
-        let hash = format!("{:x}", md5::compute(email.as_bytes()));
         html! {
             <figure class={"image is-32x32"}>
                 <img class={"is-rounded"} style={"max-height: inherit;"} src={format!("https://www.gravatar.com/avatar/{}", hash)} />
@@ -57,10 +55,13 @@ pub fn user_menu_button() -> Html {
                 </div>
             </div>
         },
-        LoginStatus::LoggedIn { name, email } => html! {
+        LoginStatus::LoggedIn {
+            name,
+            gravatar_hash,
+        } => html! {
             <div class={"navbar-item has-dropdown is-hoverable"}>
                 <a class={"navbar-link"}>
-                    <Avatar name={name} email={email} />
+                    <Avatar name={name} gravatar_hash={gravatar_hash} />
                 </a>
 
                 <div class={"navbar-dropdown"}>
