@@ -13,6 +13,9 @@ cookie_secret: "01234567890123456789012345678901"
 # Redirect URL for *all* OIDP setups is always the same:
 redirect_url: "http://localhost:3000/-/complete-login"
 
+# Redis database url, including credentials, goes here
+redis_url: "redis://redis/0"
+
 # This OpenID provider setup is only for http://localhost:3000
 # You are welcome to use it when testing changes to the Linkdoku software.
 # If it stops working it's because someone was abusing it enough that we

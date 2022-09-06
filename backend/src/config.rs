@@ -5,6 +5,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use config::{Config, ConfigError, Environment, File, FileFormat};
 use serde::Deserialize;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 pub struct OpenIDProvider {
@@ -18,6 +19,7 @@ pub struct OpenIDProvider {
 pub struct Configuration {
     pub resources: PathBuf,
     pub port: u16,
+    pub redis_url: Url,
     pub redirect_url: String,
     pub cookie_secret: String,
     pub openid: HashMap<String, OpenIDProvider>,

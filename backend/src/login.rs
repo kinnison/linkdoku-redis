@@ -19,7 +19,7 @@ use axum::{
     extract::{Path, Query},
     http::StatusCode,
     routing::get,
-    Json, Router,
+    Extension, Json, Router,
 };
 use cookie::SameSite;
 use lazy_static::lazy_static;
@@ -36,7 +36,10 @@ use tokio::sync::Mutex;
 use tower_cookies::{Cookie, Cookies, Key};
 use tracing::instrument;
 
-use crate::config::Configuration;
+use crate::{
+    config::Configuration,
+    dbconn::{Database, Identity},
+};
 
 struct ProviderSetup {
     client_id: String,
@@ -93,9 +96,8 @@ struct LoginFlowSetup {
 
 #[derive(Serialize, Deserialize)]
 struct LoginFlowUserData {
-    subject: String,
-    email: Option<String>,
-    name: Option<String>,
+    identity: Identity,
+    cached_roles: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -193,6 +195,7 @@ struct LoginContinueQuery {
 async fn handle_login_continue(
     cookies: Cookies,
     Query(params): Query<LoginContinueQuery>,
+    Extension(mut dbconn): Extension<Database>,
 ) -> Json<LoginFlowResult> {
     let mut flow = login_flow_status(&cookies).await;
     // First up, if we're already logged in, just redirect the user to the root of the app
@@ -260,13 +263,28 @@ async fn handle_login_continue(
                         .and_then(|n| n.get(None).map(|n| n.to_string()));
                     let email = claims.email().map(|e| e.to_string());
                     flow.flow = None;
-                    flow.user = Some(LoginFlowUserData {
-                        subject,
-                        email,
-                        name,
-                    });
-                    set_login_flow_status(&cookies, &flow).await;
-                    Json::from(LoginFlowResult { error: None })
+                    let identity = Identity::new(
+                        &subject,
+                        name.as_ref().unwrap_or(&subject),
+                        email.as_deref(),
+                    );
+                    match dbconn.identity_upsert_and_roles(&identity).await {
+                        Ok(roles) => {
+                            flow.user = Some(LoginFlowUserData {
+                                identity,
+                                cached_roles: roles,
+                            });
+                            set_login_flow_status(&cookies, &flow).await;
+                            Json::from(LoginFlowResult { error: None })
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed upserting identity: {:?}", e);
+                            set_login_flow_status(&cookies, &flow).await;
+                            Json::from(LoginFlowResult {
+                                error: Some("database-error".to_string()),
+                            })
+                        }
+                    }
                 }
                 Err(e) => {
                     // Failed to exchange the token, return something
@@ -295,8 +313,8 @@ async fn handle_login_status(cookies: Cookies) -> Json<BackendLoginStatus> {
     let flow = login_flow_status(&cookies).await;
     if let Some(data) = flow.user {
         Json::from(BackendLoginStatus::LoggedIn {
-            name: data.name.unwrap_or(data.subject),
-            email: data.email,
+            name: data.identity.display_name().to_string(),
+            gravatar_hash: data.identity.gravatar_hash().map(String::from),
         })
     } else {
         Json::from(BackendLoginStatus::LoggedOut)
