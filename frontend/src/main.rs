@@ -5,6 +5,7 @@ use serde_json::Value;
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
+use yew_toastrack::{Toast, ToastContainer, ToastLevel, Toaster};
 
 mod components;
 
@@ -32,6 +33,7 @@ fn app_root() -> Html {
     html! {
         <BaseURIProvider>
             <UserProvider>
+                <ToastContainer />
                 <BrowserRouter>
                     <Navbar />
                     <Switch<Route> render={Switch::render(switch)} />
@@ -166,6 +168,20 @@ fn switch(route: &Route) -> Html {
 #[function_component(LoginStateShow)]
 fn show_login_state() -> Html {
     let login_status = use_context::<LoginStatus>().expect("Cannot get login status");
+
+    let counter = use_state(|| 0usize);
+
+    let toasty = Callback::from({
+        move |_| {
+            Toaster::toast(
+                Toast::new(&format!("Hello world ({})", *counter))
+                    .with_lifetime(Some(5000))
+                    .with_level(ToastLevel::Success),
+            );
+            counter.set(*counter + 1);
+        }
+    });
+
     match login_status {
         LoginStatus::Unknown => html! {},
         LoginStatus::LoggedOut => {
@@ -178,6 +194,8 @@ fn show_login_state() -> Html {
             html! {
                 <div>
                     {format!("Your name is: {}", name)}
+                    <br />
+                    <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
                 </div>
             }
         }
