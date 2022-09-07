@@ -11,6 +11,7 @@ use crate::components::user::UserMenuNavbarItem;
 use reqwest::{Client, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
+use wasm_bindgen::JsCast;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -31,10 +32,30 @@ pub fn core_page_footer() -> Html {
 
 #[function_component(Navbar)]
 pub fn core_page_navbar() -> Html {
+    let shortcut_icon = use_state(|| {
+        use web_sys::HtmlLinkElement;
+        let mut node = gloo::utils::head().first_child();
+        while let Some(maybe_link) = node {
+            node = maybe_link.next_sibling();
+            if let Ok(link) = maybe_link.dyn_into::<HtmlLinkElement>() {
+                if &link.rel() == "icon" {
+                    return Some(link.href());
+                }
+            }
+        }
+        None
+    });
     html! {
         <nav class={"navbar is-dark"} role={"navigation"} aria-label={"main navigation"}>
             <div class={"navbar-brand"}>
                 <Link<Route> to={Route::Root} classes={"navbar-item"}>
+                    {
+                        if let Some(icon) = shortcut_icon.as_ref() {
+                           html! {<img src={icon.to_string()} width={"32"} height={"32"} />}
+                        } else {
+                            html!{}
+                        }
+                    }
                     {"Linkdoku"}
                 </Link<Route>>
 
