@@ -993,6 +993,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "url",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "yew",
