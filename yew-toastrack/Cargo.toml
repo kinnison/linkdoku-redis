@@ -10,3 +10,4 @@ yew = "0.19"
 yew-agent = "0.1"
 gloo = "0.8"
 stylist = { version = "0.10", features = ["yew_integration"] }
+serde = { version = "1", features = ["derive"] }

@@ -1,7 +1,9 @@
 //! Toast itself
 
+use serde::{Deserialize, Serialize};
+
 /// The "level" of a toast
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ToastLevel {
     Info,
     Success,
@@ -21,7 +23,7 @@ impl ToastLevel {
 }
 
 /// A toast message
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Toast {
     message: String,
     level: ToastLevel,

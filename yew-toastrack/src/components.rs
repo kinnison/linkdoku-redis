@@ -9,6 +9,8 @@ use yew_agent::{use_bridge, Dispatched, UseBridgeHandle};
 
 use crate::{agent::ToastVan, Toast, ToastLevel};
 
+use serde::{Deserialize, Serialize};
+
 /// A toaster is able to create toast on demand
 ///
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -21,14 +23,14 @@ impl Toaster {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 struct ToastListEntry {
     nr: usize,
     toast: Toast,
     age: usize,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize)]
 struct ToastList {
     nr: usize,
     paused: bool,
@@ -39,10 +41,12 @@ impl ToastList {
     const TICK_TIME_MILLIS: usize = 10;
 
     fn new() -> Self {
+        let rack: Vec<ToastListEntry> = Self::load_from_storage();
+        let nr = rack.iter().fold(0, |acc, e| acc.max(e.nr)) + rack.len();
         ToastList {
-            nr: 0,
+            nr,
             paused: false,
-            toasts: Vec::new(),
+            toasts: rack,
         }
     }
 
@@ -60,6 +64,17 @@ impl ToastList {
                 .toasts
                 .iter()
                 .any(|entry| entry.toast.lifetime().is_some())
+    }
+
+    fn store_to_storage(toasts: &[ToastListEntry]) {
+        use gloo::storage::{LocalStorage, Storage};
+        LocalStorage::set("toastrack", toasts)
+            .expect("Unable to store toastrack into LocalStorage");
+    }
+
+    fn load_from_storage() -> Vec<ToastListEntry> {
+        use gloo::storage::{LocalStorage, Storage};
+        LocalStorage::get("toastrack").unwrap_or_else(|_| Vec::new())
     }
 }
 
@@ -94,6 +109,8 @@ impl Reducible for ToastList {
                             true
                         }
                     });
+
+                    Self::store_to_storage(&ret);
                     Rc::new(Self {
                         nr: self.nr,
                         paused: self.paused && !ret.is_empty(),
@@ -109,6 +126,7 @@ impl Reducible for ToastList {
                     age: 0,
                 });
 
+                Self::store_to_storage(&ret);
                 Rc::new(Self {
                     nr: self.nr + 1,
                     paused: self.paused,
@@ -118,6 +136,8 @@ impl Reducible for ToastList {
             ToastListAction::Close(nr) => {
                 let mut ret = self.toasts.clone();
                 ret.retain(|v| v.nr != nr);
+
+                Self::store_to_storage(&ret);
                 Rc::new(Self {
                     nr: self.nr,
                     paused: self.paused && !ret.is_empty(),

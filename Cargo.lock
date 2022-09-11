@@ -2599,6 +2599,7 @@ name = "yew-toastrack"
 version = "0.1.0"
 dependencies = [
  "gloo 0.8.0",
+ "serde",
  "stylist",
  "yew",
  "yew-agent",
