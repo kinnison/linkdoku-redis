@@ -124,9 +124,15 @@ fn login_flow() -> Html {
                             BackendLoginStatus::LoggedIn {
                                 name,
                                 gravatar_hash,
+                                roles,
+                                role,
                             } => {
-                                dispatcher
-                                    .dispatch(LoginStatusAction::LoggedIn(name, gravatar_hash));
+                                dispatcher.dispatch(LoginStatusAction::LoggedIn(
+                                    name,
+                                    gravatar_hash,
+                                    roles,
+                                    role,
+                                ));
                             }
                         }
                     }

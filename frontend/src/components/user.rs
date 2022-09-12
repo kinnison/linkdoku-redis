@@ -58,6 +58,7 @@ pub fn user_menu_button() -> Html {
         LoginStatus::LoggedIn {
             name,
             gravatar_hash,
+            ..
         } => html! {
             <div class={"navbar-item has-dropdown is-hoverable"}>
                 <a class={"navbar-link"}>

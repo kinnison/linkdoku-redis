@@ -22,12 +22,35 @@ pub enum LoginStatus {
     LoggedIn {
         name: String,
         gravatar_hash: Option<String>,
+        roles: Vec<String>,
+        role: String,
     },
+}
+
+impl LoginStatus {
+    fn choose_role(&self, role: String) -> Self {
+        match self {
+            Self::Unknown => Self::Unknown,
+            Self::LoggedOut => Self::LoggedOut,
+            Self::LoggedIn {
+                name,
+                gravatar_hash,
+                roles,
+                ..
+            } => Self::LoggedIn {
+                name: name.clone(),
+                gravatar_hash: gravatar_hash.clone(),
+                roles: roles.clone(),
+                role,
+            },
+        }
+    }
 }
 
 pub enum LoginStatusAction {
     LoggedOut,
-    LoggedIn(String, Option<String>),
+    LoggedIn(String, Option<String>, Vec<String>, String),
+    ChosenRole(String),
 }
 
 impl Reducible for LoginStatus {
@@ -36,10 +59,15 @@ impl Reducible for LoginStatus {
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
         match action {
             LoginStatusAction::LoggedOut => LoginStatus::LoggedOut,
-            LoginStatusAction::LoggedIn(name, gravatar_hash) => LoginStatus::LoggedIn {
-                name,
-                gravatar_hash,
-            },
+            LoginStatusAction::LoggedIn(name, gravatar_hash, roles, role) => {
+                LoginStatus::LoggedIn {
+                    name,
+                    gravatar_hash,
+                    roles,
+                    role,
+                }
+            }
+            LoginStatusAction::ChosenRole(role) => self.choose_role(role),
         }
         .into()
     }
@@ -75,8 +103,15 @@ pub fn login_user_provider(props: &UserProviderProps) -> Html {
                         BackendLoginStatus::LoggedIn {
                             name,
                             gravatar_hash,
+                            roles,
+                            role,
                         } => {
-                            dispatcher.dispatch(LoginStatusAction::LoggedIn(name, gravatar_hash));
+                            dispatcher.dispatch(LoginStatusAction::LoggedIn(
+                                name,
+                                gravatar_hash,
+                                roles,
+                                role,
+                            ));
                         }
                     }
                 });

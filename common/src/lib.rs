@@ -6,6 +6,8 @@ pub enum BackendLoginStatus {
     LoggedIn {
         name: String,
         gravatar_hash: Option<String>,
+        roles: Vec<String>,
+        role: String,
     },
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

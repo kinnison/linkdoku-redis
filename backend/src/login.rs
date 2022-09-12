@@ -98,6 +98,7 @@ struct LoginFlowSetup {
 struct LoginFlowUserData {
     identity: Identity,
     cached_roles: Vec<String>,
+    active_role: String,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -269,10 +270,26 @@ async fn handle_login_continue(
                         email.as_deref(),
                     );
                     match dbconn.identity_upsert_and_roles(&identity).await {
-                        Ok(roles) => {
+                        Ok(mut roles) => {
+                            let default_role = identity.get_default_role();
+                            if !roles.iter().any(|v| v == &default_role) {
+                                if let Err(e) = dbconn.create_default_role(&identity).await {
+                                    tracing::error!(
+                                        "Failed creating default role for identity {:?}: {:?}",
+                                        identity,
+                                        e
+                                    );
+                                    set_login_flow_status(&cookies, &flow).await;
+                                    return Json::from(LoginFlowResult {
+                                        error: Some("databse-error".to_string()),
+                                    });
+                                }
+                                roles.push(default_role.clone());
+                            }
                             flow.user = Some(LoginFlowUserData {
                                 identity,
                                 cached_roles: roles,
+                                active_role: default_role,
                             });
                             set_login_flow_status(&cookies, &flow).await;
                             Json::from(LoginFlowResult { error: None })
@@ -315,6 +332,8 @@ async fn handle_login_status(cookies: Cookies) -> Json<BackendLoginStatus> {
         Json::from(BackendLoginStatus::LoggedIn {
             name: data.identity.display_name().to_string(),
             gravatar_hash: data.identity.gravatar_hash().map(String::from),
+            roles: data.cached_roles.clone(),
+            role: data.active_role.clone(),
         })
     } else {
         Json::from(BackendLoginStatus::LoggedOut)
