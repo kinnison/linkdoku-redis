@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 /// and a cached email hash.  We never store the full email address
 /// of an identity and only store the email hash in order to permit
 /// gravatars etc. to be supplied
+///
+/// Redis keys:
+///
+/// * `identity:{uuid}` - hash containing display_name and gravatar_hash
+/// * `identity:{uuid}:roles` - Set containing UUIDs of roles this identity can access
+///
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Identity {
     pub(crate) uuid: String,

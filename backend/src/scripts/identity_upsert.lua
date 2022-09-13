@@ -17,4 +17,4 @@ else
     redis.call("HSET", key_id, "display_name", display_name)
 end
 
-return redis.pcall("LRANGE", key_roles, 0, -1)
+return redis.pcall("SMEMBERS", key_roles)

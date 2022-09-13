@@ -196,10 +196,12 @@ fn show_login_state() -> Html {
                 </div>
             }
         }
-        LoginStatus::LoggedIn { name, .. } => {
+        LoginStatus::LoggedIn { name, role, .. } => {
             html! {
                 <div>
                     {format!("Your name is: {}", name)}
+                    <br />
+                    {format!("Your current role UUID is: {}", role)}
                     <br />
                     <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
                 </div>

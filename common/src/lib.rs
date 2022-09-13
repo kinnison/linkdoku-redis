@@ -21,3 +21,12 @@ pub enum LoginFlowStart {
 pub struct LoginFlowResult {
     pub error: Option<String>,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoleData {
+    pub uuid: String,
+    pub owner: String,
+    pub short_name: String,
+    pub display_name: String,
+    pub bio: String,
+}
