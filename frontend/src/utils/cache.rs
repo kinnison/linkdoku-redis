@@ -50,6 +50,7 @@ impl ObjectCache {
 
     pub fn get<V: DeserializeOwned>(&self, uuid: &str) -> Option<V> {
         if let Some(value) = self.cache.current().get(uuid) {
+            gloo::console::log!(format!("Retrieved {} from cache", uuid));
             serde_json::from_value(value.clone()).ok()
         } else {
             None
@@ -66,8 +67,8 @@ impl ObjectCache {
         let uuid = uuid.to_string();
         use_async_with_options(
             async move {
-                if let Some(value) = cache.cache.current().get(&uuid) {
-                    let value = serde_json::from_value(value.clone()).ok();
+                let value = cache.get(&uuid);
+                if value.is_some() {
                     return Ok(value);
                 };
                 let value = fetcher.await?;
