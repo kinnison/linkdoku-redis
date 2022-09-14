@@ -992,6 +992,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "stylist",
  "thiserror",
  "url",
  "wasm-bindgen",
