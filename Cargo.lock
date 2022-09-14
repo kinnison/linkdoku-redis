@@ -997,6 +997,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "yew",
+ "yew-hooks",
  "yew-router",
  "yew-toastrack",
 ]
@@ -2543,6 +2544,22 @@ dependencies = [
  "js-sys",
  "serde",
  "slab",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "yew",
+]
+
+[[package]]
+name = "yew-hooks"
+version = "0.1.56"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1807cd5bf44c34255534fc8a824b0d6c1022147affecbb7f10c6753f336e7309"
+dependencies = [
+ "gloo 0.4.2",
+ "js-sys",
+ "log",
+ "serde",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

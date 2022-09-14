@@ -2,6 +2,7 @@ use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
 use serde_json::Value;
+use utils::cache::{CacheEntry, ObjectCache};
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
@@ -10,6 +11,8 @@ use yew_toastrack::{Toast, ToastContainer, ToastLevel, Toaster};
 mod components;
 
 mod utils;
+
+use utils::cache::ObjectCacheProvider;
 
 use components::core::{BaseURIProvider, Footer, Navbar};
 use components::login::{LoginStatus, UserProvider};
@@ -34,14 +37,16 @@ enum Route {
 fn app_root() -> Html {
     html! {
         <BaseURIProvider>
-            <UserProvider>
-                <ToastContainer />
-                <BrowserRouter>
-                    <Navbar />
-                    <Switch<Route> render={Switch::render(switch)} />
-                    <Footer />
-                </BrowserRouter>
-            </UserProvider>
+            <ObjectCacheProvider>
+                <UserProvider>
+                    <ToastContainer />
+                    <BrowserRouter>
+                        <Navbar />
+                        <Switch<Route> render={Switch::render(switch)} />
+                        <Footer />
+                    </BrowserRouter>
+                </UserProvider>
+            </ObjectCacheProvider>
         </BaseURIProvider>
     }
 }
@@ -190,6 +195,8 @@ fn show_login_state() -> Html {
         }
     });
 
+    let cache = use_context::<ObjectCache>().expect("What, no cache?");
+
     match login_status {
         LoginStatus::Unknown => html! {},
         LoginStatus::LoggedOut => {
@@ -199,11 +206,18 @@ fn show_login_state() -> Html {
             }
         }
         LoginStatus::LoggedIn { name, role, .. } => {
+            let role_uuid = role;
+            let role = cache.cached_role(&role_uuid);
+
             html! {
                 <div>
                     {format!("Your name is: {}", name)}
                     <br />
-                    {format!("Your current role UUID is: {}", role)}
+                    {match &*role {
+                        CacheEntry::Pending => {"Loading role data...".to_string()},
+                        CacheEntry::Missing => {format!("Your role UUID is {}", role_uuid)},
+                        CacheEntry::Value(role) => {format!("Your role is: {}", role.display_name)},
+                    }}
                     <br />
                     <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
                 </div>
