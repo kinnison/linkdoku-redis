@@ -19,6 +19,7 @@ use components::login::{LoginStatus, UserProvider};
 
 use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
+use crate::components::role::Role;
 
 #[derive(Routable, PartialEq, Clone)]
 enum Route {
@@ -195,8 +196,6 @@ fn show_login_state() -> Html {
         }
     });
 
-    let cache = use_context::<ObjectCache>().expect("What, no cache?");
-
     let utility = Callback::from({
         let history = use_history().expect("What, no history?");
         move |_| {
@@ -213,18 +212,11 @@ fn show_login_state() -> Html {
             }
         }
         LoginStatus::LoggedIn { name, role, .. } => {
-            let role_uuid = role;
-            let role = cache.cached_role(&role_uuid);
-
             html! {
                 <div>
                     {format!("Your name is: {}", name)}
                     <br />
-                    {match &*role {
-                        CacheEntry::Pending => {"Loading role data...".to_string()},
-                        CacheEntry::Missing => {format!("Your role UUID is {}", role_uuid)},
-                        CacheEntry::Value(role) => {format!("Your role is: {}", role.display_name)},
-                    }}
+                    <Role uuid={role.clone()} />
                     <br />
                     <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
                     <br />
