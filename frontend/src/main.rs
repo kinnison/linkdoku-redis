@@ -197,6 +197,13 @@ fn show_login_state() -> Html {
 
     let cache = use_context::<ObjectCache>().expect("What, no cache?");
 
+    let utility = Callback::from({
+        let history = use_history().expect("What, no history?");
+        move |_| {
+            history.push(Route::LZPage);
+        }
+    });
+
     match login_status {
         LoginStatus::Unknown => html! {},
         LoginStatus::LoggedOut => {
@@ -220,6 +227,8 @@ fn show_login_state() -> Html {
                     }}
                     <br />
                     <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
+                    <br />
+                    <button class={"button is-primary"} onclick={utility}>{"LZ Utility"}</button>
                 </div>
             }
         }
