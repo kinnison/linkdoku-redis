@@ -3,6 +3,9 @@
 use yew::prelude::*;
 
 use crate::components::login::{LoginButton, LoginStatus, LogoutButton};
+use crate::components::role::Role;
+
+use super::login::{LoginStatusAction, LoginStatusDispatcher};
 
 #[derive(Clone, Properties, Default, PartialEq, Eq)]
 pub struct AvatarProps {
@@ -46,6 +49,8 @@ pub fn user_avatar(props: &AvatarProps) -> Html {
 
 #[function_component(UserMenuNavbarItem)]
 pub fn user_menu_button() -> Html {
+    let login_status_dispatch =
+        use_context::<LoginStatusDispatcher>().expect("Cannot get login status dispatcher");
     match use_context::<LoginStatus>().expect("Unable to retrieve login status") {
         LoginStatus::Unknown => html! {},
         LoginStatus::LoggedOut => html! {
@@ -58,21 +63,41 @@ pub fn user_menu_button() -> Html {
         LoginStatus::LoggedIn {
             name,
             gravatar_hash,
+            roles,
+            role,
             ..
-        } => html! {
-            <div class={"navbar-item has-dropdown is-hoverable"}>
-                <a class={"navbar-link"}>
-                    <Avatar name={name} gravatar_hash={gravatar_hash} />
-                </a>
+        } => {
+            let roles = roles
+                .into_iter()
+                .map(|this_role| {
+                    let emitter = login_status_dispatch.clone();
+                    let role_uuid = this_role.clone();
+                    let onclick = Callback::from(move |_| emitter.dispatch(LoginStatusAction::ChosenRole(role_uuid.clone())));
+                    html! {
+                        <div class={"navbar-item"}>
+                            <Role active={role == this_role} uuid={this_role.clone()} onclick={onclick} />
+                        </div>
+                    }
+                })
+                .collect::<Html>();
 
-                <div class={"navbar-dropdown"}>
-                    <div class={"navbar-item"}>
-                        <div class={"buttons"}>
-                            <LogoutButton />
+            html! {
+                <div class={"navbar-item has-dropdown is-hoverable"}>
+                    <a class={"navbar-link"}>
+                        <Avatar name={name} gravatar_hash={gravatar_hash} />
+                    </a>
+
+                    <div class={"navbar-dropdown is-right"}>
+                        {roles}
+                        <hr class={"navbar-divider"} />
+                        <div class={"navbar-item"}>
+                            <div class={"buttons"}>
+                                <LogoutButton />
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        },
+            }
+        }
     }
 }
