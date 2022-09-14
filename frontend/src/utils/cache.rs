@@ -1,14 +1,14 @@
 //! Cache provision for Linkdoku
 //!
 
-use std::{collections::HashMap, future::Future, time::Duration};
+use std::{future::Future, time::Duration};
 
+use gloo::storage::{LocalStorage, Storage};
 use js_sys::Date;
 use linkdoku_common::RoleData;
-use serde::{de::DeserializeOwned, Serialize};
-use serde_json::Value;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use yew::prelude::*;
-use yew_hooks::{use_async_with_options, use_map, UseAsyncHandle, UseAsyncOptions, UseMapHandle};
+use yew_hooks::{use_async_with_options, UseAsyncHandle, UseAsyncOptions};
 
 use crate::components::core::{make_api_call, use_api_url, APIError, ReqwestClient, NO_BODY};
 
@@ -19,18 +19,16 @@ pub struct ObjectCacheProviderProps {
     pub children: Children,
 }
 
-#[derive(Clone, PartialEq)]
-pub struct CacheEntryExpiry {
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct CacheEntryWithExpiry<T> {
     expires: f64,
-    entry: Value,
+    entry: T,
 }
 
-#[derive(Clone, PartialEq)]
-pub struct ObjectCache {
-    cache: UseMapHandle<String, CacheEntryExpiry>,
-}
+#[derive(Clone, PartialEq, Eq)]
+pub struct ObjectCache;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum CacheEntry<V: Clone + PartialEq> {
     Pending,
     Missing,
@@ -39,9 +37,7 @@ pub enum CacheEntry<V: Clone + PartialEq> {
 
 #[function_component(ObjectCacheProvider)]
 pub fn object_cache_provider(props: &ObjectCacheProviderProps) -> Html {
-    let cache = ObjectCache {
-        cache: use_map(HashMap::new()),
-    };
+    let cache = ObjectCache;
 
     html! {
         <ContextProvider<ObjectCache> context={cache}>
@@ -51,25 +47,34 @@ pub fn object_cache_provider(props: &ObjectCacheProviderProps) -> Html {
 }
 
 impl ObjectCache {
-    pub fn add_object<V: Serialize>(&self, uuid: &str, lifetime: Duration, value: V) {
-        let val = serde_json::to_value(value).expect("Unable to serialize value!");
-        gloo::console::log!(format!("Adding cache entry for {}", uuid));
-        self.cache.insert(
-            uuid.to_string(),
-            CacheEntryExpiry {
+    pub fn add_object<V>(&self, key: &str, lifetime: Duration, value: V)
+    where
+        V: Serialize + DeserializeOwned + Clone + 'static,
+    {
+        gloo::console::log!(format!("Adding cache entry for {}", key));
+
+        LocalStorage::set(
+            key,
+            CacheEntryWithExpiry {
                 expires: Date::now() + (lifetime.as_secs_f64() * 1000.0),
-                entry: val,
+                entry: value,
             },
-        );
+        )
+        .unwrap_or_else(|_| panic!("Unable to set {} into storage", key));
     }
 
-    pub fn get<V: DeserializeOwned>(&self, uuid: &str) -> Option<V> {
-        if let Some(value) = self.cache.current().get(uuid) {
+    pub fn get<V>(&self, key: &str) -> Option<V>
+    where
+        V: Serialize + DeserializeOwned + Clone + 'static,
+    {
+        let value: Option<CacheEntryWithExpiry<V>> = LocalStorage::get(key).ok();
+        if let Some(value) = value {
             if Date::now() <= value.expires {
-                gloo::console::log!(format!("Retrieved {} from cache", uuid));
-                serde_json::from_value(value.entry.clone()).ok()
+                gloo::console::log!(format!("Retrieved {} from cache", key));
+                Some(value.entry)
             } else {
-                gloo::console::log!(format!("Entry for {} expired", uuid));
+                gloo::console::log!(format!("Entry for {} expired", key));
+                LocalStorage::delete(key);
                 None
             }
         } else {
@@ -79,7 +84,7 @@ impl ObjectCache {
 
     pub fn use_cached_value<F, T, E>(
         &self,
-        uuid: &str,
+        key: &str,
         lifetime: Duration,
         fetcher: F,
     ) -> UseAsyncHandle<Option<T>, E>
@@ -89,18 +94,18 @@ impl ObjectCache {
         F: Future<Output = Result<Option<T>, E>> + 'static,
     {
         let cache = self.clone();
-        let uuid = uuid.to_string();
+        let key = key.to_string();
         use_async_with_options(
             async move {
-                let value = cache.get(&uuid);
+                let value = cache.get(&key);
                 if value.is_some() {
                     return Ok(value);
                 };
                 let value = fetcher.await?;
                 match &value {
-                    Some(value) => cache.add_object(&uuid, lifetime, value),
+                    Some(value) => cache.add_object(&key, lifetime, value.clone()),
                     None => {
-                        cache.cache.remove(&uuid);
+                        LocalStorage::delete(&key);
                     }
                 }
                 Ok(value)
@@ -114,9 +119,10 @@ impl ObjectCache {
         let cache = use_context::<ObjectCache>().expect("Cache not extant!");
         let state = use_state_eq(|| CacheEntry::Pending);
         let client = use_context::<ReqwestClient>().expect("No API client");
+        let key = format!("role:{}", uuid);
         let async_handle: UseAsyncHandle<Option<RoleData>, crate::components::core::APIError> = {
             let api_url = use_api_url(&format!("/role/get/{}", uuid));
-            cache.use_cached_value(uuid, lifetime, async move {
+            cache.use_cached_value(&key, lifetime, async move {
                 let out: Option<RoleData> =
                     make_api_call(client, api_url.as_str(), None, NO_BODY).await?;
                 Ok(out)
