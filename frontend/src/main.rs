@@ -9,6 +9,8 @@ use yew_toastrack::{Toast, ToastContainer, ToastLevel, Toaster};
 
 mod components;
 
+mod utils;
+
 use components::core::{BaseURIProvider, Footer, Navbar};
 use components::login::{LoginStatus, UserProvider};
 
