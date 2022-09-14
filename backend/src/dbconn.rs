@@ -6,7 +6,6 @@ use std::{error::Error, fmt::Display};
 
 use axum::Extension;
 use redis::{aio::ConnectionManager, Client, Cmd, RedisError, Script};
-use serde::{Deserialize, Serialize};
 
 use crate::config::Configuration;
 
@@ -24,11 +23,18 @@ pub struct Database {
 ///
 /// You can't usefully interrogate it because that's considered deep voodoo.
 #[derive(Debug)]
-pub struct DatabaseError(RedisError);
+pub enum DatabaseError {
+    NotFound(String),
+    Redis(RedisError),
+}
 
 impl Display for DatabaseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Database error: {}", self.0)
+        write!(f, "Database error: ")?;
+        match self {
+            Self::NotFound(s) => write!(f, "{} not found", s),
+            Self::Redis(rediserror) => write!(f, "{}", rediserror),
+        }
     }
 }
 
@@ -38,7 +44,7 @@ pub type DatabaseResult<T> = Result<T, DatabaseError>;
 
 impl From<RedisError> for DatabaseError {
     fn from(e: RedisError) -> Self {
-        DatabaseError(e)
+        DatabaseError::Redis(e)
     }
 }
 
@@ -48,68 +54,11 @@ pub async fn redis_layer(config: &Configuration) -> DatabaseResult<Extension<Dat
     Ok(Extension(Database { conn: conn_mgr }))
 }
 
-/// Identities are stored in the `identity` prefix in Redis
-///
-/// An identity has cached information such as a display name
-/// and a cached email hash.  We never store the full email address
-/// of an identity and only store the email hash in order to permit
-/// gravatars etc. to be supplied
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Identity {
-    uuid: String,
-    display_name: String,
-    gravatar_hash: Option<String>,
-}
+mod identity;
+pub use identity::*;
 
-impl Identity {
-    /// Create a new identity based on the given display name and
-    /// email address.  This will create a new UUID for the identity
-    /// as well, based on the subject identifier
-    pub fn new(subj: &str, display_name: &str, email: Option<&str>) -> Identity {
-        let uuid = format!("{:x}", md5::compute(subj));
-        let display_name = display_name.to_string();
-        let gravatar_hash = email.map(|s| format!("{:x}", md5::compute(s)));
-        Identity {
-            uuid,
-            display_name,
-            gravatar_hash,
-        }
-    }
-
-    /// This identity's UUID
-    pub fn uuid(&self) -> &str {
-        &self.uuid
-    }
-
-    /// This identity's display_name
-    pub fn display_name(&self) -> &str {
-        &self.display_name
-    }
-
-    /// This identity's gravatar hash
-    pub fn gravatar_hash(&self) -> Option<&str> {
-        self.gravatar_hash.as_deref()
-    }
-
-    /// Internal conversion from redis key/value list
-    fn from_list(uuid: &str, mut kvs: impl Iterator<Item = String>) -> Identity {
-        let mut ret = Identity {
-            uuid: uuid.to_string(),
-            display_name: String::new(),
-            gravatar_hash: None,
-        };
-        while let Some(key) = kvs.next() {
-            if let Some(value) = kvs.next() {
-                match key.as_str() {
-                    "display_name" => ret.display_name = value,
-                    "gravatar_hash" => ret.gravatar_hash = Some(value),
-                    _ => tracing::warn!("Unknown kv pair decoding Identity: {}={}", key, value),
-                }
-            }
-        }
-        ret
-    }
-}
+mod role;
+pub use role::*;
 
 /// Database functions related to [Identity][]
 ///
@@ -156,6 +105,74 @@ impl Database {
             .key(format!("identity:{}:roles", identity.uuid()))
             .arg(identity.display_name())
             .arg(identity.gravatar_hash().unwrap_or(""));
+        Ok(invocation.invoke_async(&mut self.conn).await?)
+    }
+
+    pub async fn role_by_uuid(&mut self, uuid: &str) -> DatabaseResult<Role> {
+        let kvs: Vec<String> = Cmd::hgetall(format!("role:{}", uuid))
+            .query_async(&mut self.conn)
+            .await?;
+        if kvs.is_empty() {
+            Err(DatabaseError::NotFound(format!("role:{}", uuid)))
+        } else {
+            Ok(Role::from_list(uuid, kvs.into_iter()))
+        }
+    }
+
+    /// Normalise a role name, and ensure it is unique.
+    /// Note: this is no guarantee of uniqueness by the time you get to the server later, but it's
+    /// a good way to ensure nothing unusual happens.
+    pub async fn normalise_and_unique_rolename(
+        &mut self,
+        role_name: &str,
+    ) -> DatabaseResult<String> {
+        // Step one is to take the lower-cased ascii version of role_name
+        let mut role_name = role_name.to_ascii_lowercase();
+        // Next we replace any spaces with underscores
+        role_name = role_name.replace(' ', "_");
+        // Next, we remove anything which isn't `-`, `_`, `.`, a letter, or a digit
+        role_name.retain(|c| "abcdefghijklmnopqrstuvwxyz0123456789-_.".contains(c));
+        // Now we take the role name and if it's a reserved word we add an underscore afterwards
+        const RESERVED_ROLE_NAMES: &[&str] = &["api", "-", "linkdoku"];
+        if RESERVED_ROLE_NAMES.iter().any(|&s| s == role_name) {
+            role_name.push('_');
+        }
+        // Finally we set a counter at zero, and we try and find a unique role name...
+        let mut full_role_name = role_name.clone();
+        let mut counter = 0;
+        loop {
+            let found: bool = Cmd::hexists("role:byname", &full_role_name)
+                .query_async(&mut self.conn)
+                .await?;
+            if !found {
+                break Ok(full_role_name);
+            }
+            full_role_name = format!("{}_{}", role_name, counter);
+            counter += 1;
+        }
+    }
+
+    pub async fn create_default_role(&mut self, identity: &Identity) -> DatabaseResult<()> {
+        let uuid = identity.get_default_role();
+        let display_name = identity.display_name().to_string();
+        let short_name = self
+            .normalise_and_unique_rolename(identity.display_name())
+            .await?;
+        let owner = identity.uuid().to_string();
+        let bio = format!("# {}\n\nTODO", identity.display_name());
+
+        const CREATE_ROLE_SCRIPT: &str = include_str!("scripts/create_role.lua");
+        let script = Script::new(CREATE_ROLE_SCRIPT);
+        let mut invocation = script.prepare_invoke();
+        invocation
+            .key(format!("role:{}", uuid))
+            .key("role:byname")
+            .key(format!("identity:{}:roles", identity.uuid()))
+            .arg(uuid)
+            .arg(owner)
+            .arg(short_name)
+            .arg(display_name)
+            .arg(bio);
         Ok(invocation.invoke_async(&mut self.conn).await?)
     }
 }

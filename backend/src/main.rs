@@ -20,6 +20,7 @@ async fn handle_root() -> Redirect {
 mod config;
 mod dbconn;
 mod login;
+mod role;
 
 #[tokio::main]
 async fn main() {
@@ -77,5 +78,7 @@ async fn main() {
 }
 
 fn api_router() -> Router {
-    Router::new().nest("/login", login::router())
+    Router::new()
+        .nest("/login", login::router())
+        .nest("/role", role::router())
 }

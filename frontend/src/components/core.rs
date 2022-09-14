@@ -152,12 +152,18 @@ pub fn use_api_url(api: &str) -> Url {
 
 pub const NO_BODY: Option<()> = None;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum APIError {
     #[error("URL Parse Error: {0}")]
     URLParseError(#[from] url::ParseError),
     #[error("Error with reqwest: {0}")]
-    ReqwestError(#[from] reqwest::Error),
+    ReqwestError(String),
+}
+
+impl From<reqwest::Error> for APIError {
+    fn from(v: reqwest::Error) -> Self {
+        APIError::ReqwestError(format!("{}", v))
+    }
 }
 
 /// Make an async API call.

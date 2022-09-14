@@ -2,6 +2,7 @@ use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
 use serde_json::Value;
+use utils::cache::{CacheEntry, ObjectCache};
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
@@ -9,11 +10,16 @@ use yew_toastrack::{Toast, ToastContainer, ToastLevel, Toaster};
 
 mod components;
 
+mod utils;
+
+use utils::cache::ObjectCacheProvider;
+
 use components::core::{BaseURIProvider, Footer, Navbar};
 use components::login::{LoginStatus, UserProvider};
 
 use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
+use crate::components::role::Role;
 
 #[derive(Routable, PartialEq, Clone)]
 enum Route {
@@ -32,14 +38,16 @@ enum Route {
 fn app_root() -> Html {
     html! {
         <BaseURIProvider>
-            <UserProvider>
-                <ToastContainer />
-                <BrowserRouter>
-                    <Navbar />
-                    <Switch<Route> render={Switch::render(switch)} />
-                    <Footer />
-                </BrowserRouter>
-            </UserProvider>
+            <ObjectCacheProvider>
+                <UserProvider>
+                    <ToastContainer />
+                    <BrowserRouter>
+                        <Navbar />
+                        <Switch<Route> render={Switch::render(switch)} />
+                        <Footer />
+                    </BrowserRouter>
+                </UserProvider>
+            </ObjectCacheProvider>
         </BaseURIProvider>
     }
 }
@@ -124,9 +132,15 @@ fn login_flow() -> Html {
                             BackendLoginStatus::LoggedIn {
                                 name,
                                 gravatar_hash,
+                                roles,
+                                role,
                             } => {
-                                dispatcher
-                                    .dispatch(LoginStatusAction::LoggedIn(name, gravatar_hash));
+                                dispatcher.dispatch(LoginStatusAction::LoggedIn(
+                                    name,
+                                    gravatar_hash,
+                                    roles,
+                                    role,
+                                ));
                             }
                         }
                     }
@@ -182,6 +196,13 @@ fn show_login_state() -> Html {
         }
     });
 
+    let utility = Callback::from({
+        let history = use_history().expect("What, no history?");
+        move |_| {
+            history.push(Route::LZPage);
+        }
+    });
+
     match login_status {
         LoginStatus::Unknown => html! {},
         LoginStatus::LoggedOut => {
@@ -190,12 +211,16 @@ fn show_login_state() -> Html {
                 </div>
             }
         }
-        LoginStatus::LoggedIn { name, .. } => {
+        LoginStatus::LoggedIn { name, role, .. } => {
             html! {
                 <div>
                     {format!("Your name is: {}", name)}
                     <br />
+                    <Role uuid={role.clone()} />
+                    <br />
                     <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
+                    <br />
+                    <button class={"button is-primary"} onclick={utility}>{"LZ Utility"}</button>
                 </div>
             }
         }
