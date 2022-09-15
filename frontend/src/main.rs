@@ -21,6 +21,8 @@ use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
 use crate::components::role::Role;
 
+use yew_markdown::render::MarkdownRender;
+
 #[derive(Routable, PartialEq, Clone)]
 enum Route {
     #[at("/-/")]
@@ -203,6 +205,24 @@ fn show_login_state() -> Html {
         }
     });
 
+    const MARKDOWN: &str = r#"
+# Hello World
+
+This is a paragraph of text as a markdown object.
+It will be interesting to see what the everything looks like.
+
+| What | Are | You | Up | To |
+| :---- | :--- | ---: | :--: | :-- |
+| I'm  | Not | Sure | Truly | Sorry |
+
+Are you interested in [this link](https://example.com/)?
+Perhaps you want to try a [reference link][rl] instead?
+
+
+[rl]: https://www.digital-scurf.org/
+
+    "#;
+
     match login_status {
         LoginStatus::Unknown => html! {},
         LoginStatus::LoggedOut => {
@@ -221,6 +241,8 @@ fn show_login_state() -> Html {
                     <button class={"button is-danger"} onclick={toasty}>{"Say hello"}</button>
                     <br />
                     <button class={"button is-primary"} onclick={utility}>{"LZ Utility"}</button>
+                    <br />
+                    <MarkdownRender markdown={MARKDOWN} />
                 </div>
             }
         }
