@@ -72,6 +72,7 @@ impl Database {
     /// Acquire an identity from the database if it is available, by its computed id
     ///
     /// If the identity does not exist, this will return `Ok(None)`
+    #[allow(dead_code)]
     pub async fn identity_by_uuid(&mut self, uuid: &str) -> DatabaseResult<Option<Identity>> {
         let kvs: Vec<String> = Cmd::hgetall(format!("identity:{}", uuid))
             .query_async(&mut self.conn)
@@ -86,6 +87,7 @@ impl Database {
     /// Acquire an identity from the database if it is available, by its subject identifier
     ///
     /// If the identity does not exist, this will return `Ok(None)`
+    #[allow(dead_code)]
     pub async fn identity_by_subject(&mut self, subj: &str) -> DatabaseResult<Option<Identity>> {
         let uuid = format!("{:x}", md5::compute(subj));
         self.identity_by_uuid(&uuid).await

@@ -2,7 +2,6 @@ use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
 use serde_json::Value;
-use utils::cache::{CacheEntry, ObjectCache};
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
