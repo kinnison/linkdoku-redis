@@ -152,7 +152,7 @@ pub fn use_api_url(api: &str) -> Url {
 
 pub const NO_BODY: Option<()> = None;
 
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum APIError {
     #[error("URL Parse Error: {0}")]
     URLParseError(#[from] url::ParseError),

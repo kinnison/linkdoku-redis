@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use stylist::yew::{styled_component, use_style};
+use stylist::yew::styled_component;
 use yew::prelude::*;
 
 #[derive(Properties, PartialEq)]
@@ -13,7 +13,7 @@ pub struct TabContentProps {
 }
 
 #[styled_component(TabContent)]
-pub fn tab_content(props: &TabContentProps) -> Html {
+pub fn tab_content(_props: &TabContentProps) -> Html {
     html! {}
 }
 
@@ -33,7 +33,7 @@ pub fn tabbed(props: &TabbedProps) -> Html {
     let current_tab = use_state_eq(|| {
         tabs.iter()
             .enumerate()
-            .find(|&(idx, tab)| tab.title == props.default)
+            .find(|&(_, tab)| tab.title == props.default)
             .map(|(idx, _)| idx)
             .unwrap_or(0)
     });
