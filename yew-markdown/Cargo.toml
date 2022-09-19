@@ -10,3 +10,6 @@ yew = "0.19"
 gloo = "0.8"
 stylist = { version = "0.10", features = ["yew_integration"] }
 pulldown-cmark = "0.9.2"
+yew-bulma-tabs = { path = "../yew-bulma-tabs" }
+yew-hooks = "0.1.56"
+web-sys = "0.3.60"

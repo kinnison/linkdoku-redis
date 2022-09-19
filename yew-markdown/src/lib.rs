@@ -2,4 +2,5 @@
 //!
 //! This likely uses a bunch of Bulma classes etc.
 
+pub mod editor;
 pub mod render;
