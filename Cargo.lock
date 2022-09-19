@@ -2432,9 +2432,9 @@ checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
 
 [[package]]
 name = "web-sys"
-version = "0.3.59"
+version = "0.3.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed055ab27f941423197eb86b2035720b1a3ce40504df082cac2ecc6ed73335a1"
+checksum = "bcda906d8be16e728fd5adc5b729afad4e444e106ab28cd1c7256e54fa61510f"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -2581,6 +2581,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yew-bulma-tabs"
+version = "0.1.0"
+dependencies = [
+ "gloo 0.8.0",
+ "stylist",
+ "yew",
+]
+
+[[package]]
 name = "yew-hooks"
 version = "0.1.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2617,7 +2626,10 @@ dependencies = [
  "gloo 0.8.0",
  "pulldown-cmark",
  "stylist",
+ "web-sys",
  "yew",
+ "yew-bulma-tabs",
+ "yew-hooks",
 ]
 
 [[package]]

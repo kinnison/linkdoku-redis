@@ -21,7 +21,7 @@ use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
 use crate::components::role::Role;
 
-use yew_markdown::render::MarkdownRender;
+use yew_markdown::editor::MarkdownEditor;
 
 #[derive(Routable, PartialEq, Clone)]
 enum Route {
@@ -242,7 +242,7 @@ Perhaps you want to try a [reference link][rl] instead?
                     <br />
                     <button class={"button is-primary"} onclick={utility}>{"LZ Utility"}</button>
                     <br />
-                    <MarkdownRender markdown={MARKDOWN} />
+                    <MarkdownEditor name={"markdown"} initial={MARKDOWN} />
                 </div>
             }
         }
