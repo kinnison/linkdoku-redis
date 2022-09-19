@@ -5,4 +5,5 @@ members = [
   "common",
   "yew-toastrack",
   "yew-markdown",
+  "yew-bulma-tabs",
 ]
