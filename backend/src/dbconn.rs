@@ -54,11 +54,16 @@ pub async fn redis_layer(config: &Configuration) -> DatabaseResult<Extension<Dat
     Ok(Extension(Database { conn: conn_mgr }))
 }
 
+mod normalise;
+
 mod identity;
 pub use identity::*;
 
 mod role;
 pub use role::*;
+
+mod puzzle;
+pub use puzzle::*;
 
 /// Database functions related to [Identity][]
 ///
@@ -120,46 +125,11 @@ impl Database {
             Ok(Role::from_list(uuid, kvs.into_iter()))
         }
     }
-
-    /// Normalise a role name, and ensure it is unique.
-    /// Note: this is no guarantee of uniqueness by the time you get to the server later, but it's
-    /// a good way to ensure nothing unusual happens.
-    pub async fn normalise_and_unique_rolename(
-        &mut self,
-        role_name: &str,
-    ) -> DatabaseResult<String> {
-        // Step one is to take the lower-cased ascii version of role_name
-        let mut role_name = role_name.to_ascii_lowercase();
-        // Next we replace any spaces with underscores
-        role_name = role_name.replace(' ', "_");
-        // Next, we remove anything which isn't `-`, `_`, `.`, a letter, or a digit
-        role_name.retain(|c| "abcdefghijklmnopqrstuvwxyz0123456789-_.".contains(c));
-        // Now we take the role name and if it's a reserved word we add an underscore afterwards
-        const RESERVED_ROLE_NAMES: &[&str] = &["api", "-", "linkdoku"];
-        if RESERVED_ROLE_NAMES.iter().any(|&s| s == role_name) {
-            role_name.push('_');
-        }
-        // Finally we set a counter at zero, and we try and find a unique role name...
-        let mut full_role_name = role_name.clone();
-        let mut counter = 0;
-        loop {
-            let found: bool = Cmd::hexists("role:byname", &full_role_name)
-                .query_async(&mut self.conn)
-                .await?;
-            if !found {
-                break Ok(full_role_name);
-            }
-            full_role_name = format!("{}_{}", role_name, counter);
-            counter += 1;
-        }
-    }
-
     pub async fn create_default_role(&mut self, identity: &Identity) -> DatabaseResult<()> {
         let uuid = identity.get_default_role();
         let display_name = identity.display_name().to_string();
-        let short_name = self
-            .normalise_and_unique_rolename(identity.display_name())
-            .await?;
+        let short_name =
+            normalise::unique_short_name(self, identity.display_name(), "role").await?;
         let owner = identity.uuid().to_string();
         let bio = format!("# {}\n\nTODO", identity.display_name());
 
@@ -176,5 +146,45 @@ impl Database {
             .arg(display_name)
             .arg(bio);
         Ok(invocation.invoke_async(&mut self.conn).await?)
+    }
+
+    pub async fn create_puzzle(&mut self, puzzle: &Puzzle) -> DatabaseResult<String> {
+        use linkdoku_common::Visibility;
+        // Creating a puzzle requires normalising a short name and setting a UUID
+        let short_name = normalise::unique_short_name(self, puzzle.short_name(), "puzzle").await?;
+        let uuid = Puzzle::create_uuid(puzzle.owner(), &short_name);
+
+        const CREATE_PUZZLE_SCRIPT: &str = include_str!("scripts/create_puzzle.lua");
+        let script = Script::new(CREATE_PUZZLE_SCRIPT);
+        let mut invocation = script.prepare_invoke();
+
+        invocation
+            .key(format!("puzzle:{}", uuid))
+            .key("puzzle:byname")
+            .key(format!("role:{}:puzzles", puzzle.owner()))
+            .arg(uuid)
+            .arg(puzzle.owner())
+            .arg(short_name)
+            .arg(puzzle.display_name())
+            .arg(match puzzle.visibility() {
+                Visibility::Restricted => "restricted",
+                Visibility::Public => "public",
+                Visibility::Published => "published",
+            })
+            .arg(puzzle.visibility_date().unwrap_or(""))
+            .arg(Puzzle::compress_states(puzzle.states()));
+
+        Ok(invocation.invoke_async(&mut self.conn).await?)
+    }
+
+    pub async fn puzzle_by_uuid(&mut self, uuid: &str) -> DatabaseResult<Puzzle> {
+        let kvs: Vec<String> = Cmd::hgetall(format!("puzzle:{}", uuid))
+            .query_async(&mut self.conn)
+            .await?;
+        if kvs.is_empty() {
+            Err(DatabaseError::NotFound(format!("puzzle:{}", uuid)))
+        } else {
+            Ok(Puzzle::from_list(uuid, kvs.into_iter()))
+        }
     }
 }

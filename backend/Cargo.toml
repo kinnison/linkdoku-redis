@@ -22,3 +22,5 @@ config = "0.13"
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }
 url = "2.2"
 md5 = "0.7"
+xz2 = "0.1"
+base64 = "0.13"

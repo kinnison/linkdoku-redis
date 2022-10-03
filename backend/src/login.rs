@@ -95,19 +95,31 @@ struct LoginFlowSetup {
 }
 
 #[derive(Serialize, Deserialize)]
-struct LoginFlowUserData {
+pub struct LoginFlowUserData {
     identity: Identity,
     cached_roles: Vec<String>,
     active_role: String,
 }
 
+impl LoginFlowUserData {
+    pub fn has_role(&self, role: &str) -> bool {
+        self.cached_roles.iter().any(|r| r == role)
+    }
+}
+
 #[derive(Serialize, Deserialize, Default)]
-struct LoginFlowStatus {
+pub struct LoginFlowStatus {
     flow: Option<LoginFlowSetup>,
     user: Option<LoginFlowUserData>,
 }
 
-async fn login_flow_status(cookies: &Cookies) -> LoginFlowStatus {
+impl LoginFlowStatus {
+    pub fn user(&self) -> Option<&LoginFlowUserData> {
+        self.user.as_ref()
+    }
+}
+
+pub async fn login_flow_status(cookies: &Cookies) -> LoginFlowStatus {
     serde_json::from_str(
         &cookies
             .private(&*LOGIN_KEY.lock().await)
