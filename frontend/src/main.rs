@@ -1,3 +1,6 @@
+// Until Yew fixes this issue...
+#![allow(clippy::let_unit_value)]
+
 use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
