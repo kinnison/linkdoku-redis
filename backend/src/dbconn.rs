@@ -200,14 +200,24 @@ impl Database {
         Ok(uuid)
     }
 
-    pub async fn puzzle_by_uuid(&mut self, uuid: &str) -> DatabaseResult<Puzzle> {
+    pub async fn puzzle_by_uuid_or_short_name(
+        &mut self,
+        uuid_or_short_name: &str,
+    ) -> DatabaseResult<Puzzle> {
+        let uuid = if Self::smells_like_uuid(uuid_or_short_name) {
+            uuid_or_short_name.to_string()
+        } else {
+            Cmd::hget("puzzle:byname", uuid_or_short_name)
+                .query_async(&mut self.conn)
+                .await?
+        };
         let kvs: Vec<String> = Cmd::hgetall(format!("puzzle:{}", uuid))
             .query_async(&mut self.conn)
             .await?;
         if kvs.is_empty() {
             Err(DatabaseError::NotFound(format!("puzzle:{}", uuid)))
         } else {
-            Ok(Puzzle::from_list(uuid, kvs.into_iter()))
+            Ok(Puzzle::from_list(&uuid, kvs.into_iter()))
         }
     }
 }

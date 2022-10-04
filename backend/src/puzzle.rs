@@ -62,20 +62,20 @@ async fn create_puzzle(
 
 pub async fn retrieve_puzzle(
     cookies: Cookies,
-    Path(uuid): Path<String>,
+    Path(puzzle): Path<String>,
     Extension(mut dbconn): Extension<Database>,
 ) -> Json<Option<APIPuzzle>> {
-    let puzzle = match dbconn.puzzle_by_uuid(&uuid).await {
+    let puzzle_data = match dbconn.puzzle_by_uuid_or_short_name(&puzzle).await {
         Ok(puzzle) => puzzle,
         Err(_) => return None.into(),
     };
 
-    tracing::info!("Fetched puzzle {}", uuid);
+    tracing::info!("Fetched puzzle {}", puzzle);
 
     let is_logged_in_owner = {
         let flow = login_flow_status(&cookies).await;
         match flow.user() {
-            Some(x) => x.has_role(puzzle.owner()),
+            Some(x) => x.has_role(puzzle_data.owner()),
             None => false,
         }
     };
@@ -85,7 +85,7 @@ pub async fn retrieve_puzzle(
         is_logged_in_owner
     );
 
-    let can_see_puzzle = match puzzle.visibility() {
+    let can_see_puzzle = match puzzle_data.visibility() {
         Visibility::Restricted => is_logged_in_owner,
         Visibility::Public => true,
         Visibility::Published => true,
@@ -96,11 +96,11 @@ pub async fn retrieve_puzzle(
         return None.into();
     }
 
-    Some(puzzle.as_api_puzzle(is_logged_in_owner)).into()
+    Some(puzzle_data.as_api_puzzle(is_logged_in_owner)).into()
 }
 
 pub fn router() -> Router {
     Router::new()
         .route("/create", post(create_puzzle))
-        .route("/retrieve", get(retrieve_puzzle))
+        .route("/get/:puzzle", get(retrieve_puzzle))
 }
