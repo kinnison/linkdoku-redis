@@ -5,7 +5,7 @@ use std::{fmt::Debug, future::Future, time::Duration};
 
 use gloo::storage::{LocalStorage, Storage};
 use js_sys::Date;
-use linkdoku_common::RoleData;
+use linkdoku_common::{Puzzle, RoleData};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use yew::prelude::*;
 use yew_hooks::{use_async_with_options, UseAsyncHandle, UseAsyncOptions};
@@ -13,6 +13,7 @@ use yew_hooks::{use_async_with_options, UseAsyncHandle, UseAsyncOptions};
 use crate::components::core::{make_api_call, use_api_url, APIError, ReqwestClient, NO_BODY};
 
 const ROLE_CACHE_LIFETIME: Duration = Duration::from_secs(60 * 5); // Five minute cache for roles
+const PUZZLE_CACHE_LIFETIME: Duration = Duration::from_secs(60); // One minute cache for puzzles
 
 #[derive(Properties, PartialEq)]
 pub struct ObjectCacheProviderProps {
@@ -35,6 +36,7 @@ where
 {
     Pending,
     Missing,
+    Error(String),
     Value(V),
 }
 
@@ -50,6 +52,16 @@ where
         matches!(self, Self::Missing)
     }
 
+    pub fn is_error(&self) -> bool {
+        matches!(self, Self::Error(_))
+    }
+
+    pub fn error_text(&self) -> &str {
+        match self {
+            Self::Error(e) => e,
+            _ => "",
+        }
+    }
     pub fn value(&self) -> Option<&V> {
         match self {
             Self::Value(v) => Some(v),
@@ -138,16 +150,30 @@ impl ObjectCache {
     }
 
     pub fn cached_role(&self, uuid_or_short_name: &str) -> UseStateHandle<CacheEntry<RoleData>> {
-        let lifetime = ROLE_CACHE_LIFETIME;
+        self.cached_object(uuid_or_short_name, "role", ROLE_CACHE_LIFETIME)
+    }
+
+    pub fn cached_puzzle(&self, uuid_or_short_name: &str) -> UseStateHandle<CacheEntry<Puzzle>> {
+        self.cached_object(uuid_or_short_name, "puzzle", PUZZLE_CACHE_LIFETIME)
+    }
+
+    fn cached_object<T>(
+        &self,
+        uuid_or_short_name: &str,
+        kind: &'static str,
+        lifetime: Duration,
+    ) -> UseStateHandle<CacheEntry<T>>
+    where
+        T: Clone + PartialEq + Debug + Serialize + DeserializeOwned + 'static,
+    {
         let cache = use_context::<ObjectCache>().expect("Cache not extant!");
         let state = use_state_eq(|| CacheEntry::Pending);
         let client = use_context::<ReqwestClient>().expect("No API client");
-        let key = format!("role:{}", uuid_or_short_name);
-        let async_handle: UseAsyncHandle<Option<RoleData>, crate::components::core::APIError> = {
-            let api_url = use_api_url(&format!("/role/get/{}", uuid_or_short_name));
+        let key = format!("{}:{}", kind, uuid_or_short_name);
+        let async_handle: UseAsyncHandle<Option<T>, crate::components::core::APIError> = {
+            let api_url = use_api_url(&format!("/{}/get/{}", kind, uuid_or_short_name));
             cache.use_cached_value(&key, lifetime, async move {
-                let out: Option<RoleData> =
-                    make_api_call(client, api_url.as_str(), None, NO_BODY).await?;
+                let out: Option<T> = make_api_call(client, api_url.as_str(), None, NO_BODY).await?;
                 Ok(out)
             })
         };
@@ -155,14 +181,20 @@ impl ObjectCache {
         use_effect_with_deps(
             {
                 let state = state.clone();
-                move |handle: &UseAsyncHandle<Option<RoleData>, APIError>| {
-                    if !handle.loading {
+                move |handle: &UseAsyncHandle<Option<T>, APIError>| {
+                    if !handle.loading && (handle.data.is_some() || handle.error.is_some()) {
                         gloo::console::log!(format!(
-                            "Cached role callback, handle data returned {:?}",
-                            handle.data
+                            "Cached {} callback, handle data returned {:?}",
+                            kind, handle.data
                         ));
                         match &handle.data {
-                            None => state.set(CacheEntry::Pending),
+                            None => {
+                                gloo::console::log!(format!("handle.error: {:?}", handle.error));
+                                state.set(CacheEntry::Error(format!(
+                                    "{}",
+                                    handle.error.as_ref().unwrap()
+                                )))
+                            }
                             Some(None) => state.set(CacheEntry::Missing),
                             Some(Some(value)) => state.set(CacheEntry::Value(value.clone())),
                         }

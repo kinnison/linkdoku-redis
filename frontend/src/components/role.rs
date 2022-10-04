@@ -39,7 +39,7 @@ pub fn render_role(props: &RoleProps) -> Html {
             // Do the "loading animation"
             html! {}
         }
-        CacheEntry::Missing => {
+        CacheEntry::Missing | CacheEntry::Error(_) => {
             // The role is missing, so the role content will be the role's UUID
             html! {
                 <span>{props.uuid.clone()}</span>
@@ -152,6 +152,20 @@ pub fn role_page(props: &RolePageProps) -> Html {
             Toast::new(&format!("Role {} was not found", props.role))
                 .with_lifetime(Some(5000))
                 .with_level(ToastLevel::Danger),
+        );
+        history.push(Route::Root);
+        return html! {};
+    }
+
+    if role_data.is_error() {
+        Toaster::toast(
+            Toast::new(&format!(
+                "Error fetching role {}: {}",
+                props.role,
+                role_data.error_text()
+            ))
+            .with_lifetime(Some(5000))
+            .with_level(ToastLevel::Danger),
         );
         history.push(Route::Root);
         return html! {};

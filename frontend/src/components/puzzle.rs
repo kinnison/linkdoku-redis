@@ -3,6 +3,7 @@
 
 use linkdoku_common::Rating;
 use yew::prelude::*;
+use yew_hooks::prelude::*;
 use yew_markdown::editor::MarkdownEditor;
 use yew_router::prelude::*;
 use yew_toastrack::*;
@@ -42,6 +43,63 @@ pub struct PuzzlePageProps {
 
 #[function_component(PuzzlePage)]
 pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
+    let cache = use_context::<ObjectCache>().expect("No cache?");
+    let puzzle_data = cache.cached_puzzle(&props.puzzle);
+    let history = use_history().expect("No history?");
+
+    gloo::console::log!(format!("Puzzle Page: puzzle={:?}", &*puzzle_data));
+
+    if puzzle_data.is_pending() {
+        // Eventually render a page spinner
+        return html! {};
+    }
+
+    if puzzle_data.is_missing() {
+        Toaster::toast(
+            Toast::new(&format!("Puzzle {} was not found", props.puzzle))
+                .with_lifetime(Some(5000))
+                .with_level(ToastLevel::Danger),
+        );
+        history.push(Route::Root);
+        return html! {};
+    }
+
+    if puzzle_data.is_error() {
+        Toaster::toast(
+            Toast::new(&format!(
+                "Error fetching puzzle {}: {}",
+                props.puzzle,
+                puzzle_data.error_text()
+            ))
+            .with_lifetime(Some(5000))
+            .with_level(ToastLevel::Danger),
+        );
+        history.push(Route::Root);
+        return html! {};
+    }
+
+    // We have the role data, so let's render it
+    let puzzle_data = puzzle_data.value().unwrap().clone();
+
+    // if it turns out we were invoked by UUID, redirect to short-name because it's nicer for copy/pasta
+    if props.puzzle == puzzle_data.uuid {
+        // check if the current history value shows the current puzzle by uuid too
+        if let Some(Route::PuzzlePage { puzzle }) = history.location().route::<Route>() {
+            gloo::console::log!(format!(
+                "puzzle == {}, uuid == {}, route_puzzle == {}",
+                props.puzzle, puzzle_data.uuid, puzzle
+            ));
+            if puzzle == props.puzzle {
+                // Still showing UUID, so replace in the URL
+                history.replace(Route::PuzzlePage {
+                    puzzle: puzzle_data.short_name.clone(),
+                });
+            }
+        }
+    }
+
+    use_title(format!("Linkdoku - Puzzle - {}", puzzle_data.display_name));
+
     gloo::console::log!(format!("Rendering puzzle page for {}", props.puzzle));
     html! {}
 }
@@ -98,7 +156,7 @@ pub fn create_puzzle() -> Html {
                 CacheEntry::Pending => Some(html! {
                     <option value={uuid.clone()} selected={*uuid == state.owner}>{uuid}</option>
                 }),
-                CacheEntry::Missing => None,
+                CacheEntry::Missing | CacheEntry::Error(_) => None,
                 CacheEntry::Value(role_data) => Some(html! {
                     <option value={role_data.uuid.clone()} selected={*uuid == state.owner}>{role_data.display_name.clone()}</option>
                 }),
