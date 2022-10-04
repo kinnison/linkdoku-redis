@@ -187,6 +187,6 @@ where
     } else {
         client.client.get(url).build()?
     };
-    let response = client.client.execute(request).await?;
+    let response = client.client.execute(request).await?.error_for_status()?;
     Ok(response.json().await?)
 }
