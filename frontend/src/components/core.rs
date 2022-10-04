@@ -150,6 +150,17 @@ pub fn use_api_url(api: &str) -> Url {
     ret
 }
 
+///  Retrieve a Page URL
+pub(crate) fn use_page_url(page: Route) -> Url {
+    let base =
+        use_context::<BaseURI>().expect("Cannot use use_page_url() outside of <BaseURIProvider>");
+    let mut ret = base.base;
+    ret.set_path(&page.to_path());
+    ret.set_fragment(None);
+    ret.set_query(None);
+    ret
+}
+
 pub const NO_BODY: Option<()> = None;
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]

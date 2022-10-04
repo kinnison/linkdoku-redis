@@ -2,6 +2,7 @@
 //!
 
 use linkdoku_common::Rating;
+use stylist::yew::*;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
 use yew_markdown::editor::MarkdownEditor;
@@ -14,8 +15,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     components::{
-        core::{make_api_call, use_api_url, ReqwestClient},
+        core::{make_api_call, use_api_url, use_page_url, ReqwestClient},
         login::LoginStatus,
+        utility::{CopyButton, Tooltip, TooltipAlignment},
     },
     utils::cache::{CacheEntry, ObjectCache},
     Route,
@@ -41,7 +43,7 @@ pub struct PuzzlePageProps {
     pub puzzle: String,
 }
 
-#[function_component(PuzzlePage)]
+#[styled_component(PuzzlePage)]
 pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
     let cache = use_context::<ObjectCache>().expect("No cache?");
     let puzzle_data = cache.cached_puzzle(&props.puzzle);
@@ -101,7 +103,27 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
     use_title(format!("Linkdoku - Puzzle - {}", puzzle_data.display_name));
 
     gloo::console::log!(format!("Rendering puzzle page for {}", props.puzzle));
-    html! {}
+
+    let puzzle_uuid_url = use_page_url(Route::PuzzlePage {
+        puzzle: puzzle_data.uuid.clone(),
+    });
+
+    let valign_top = use_style("vertical-align: top;");
+
+    html! {
+        <>
+            <div class={"block"}>
+                <span class={"title is-1"}>
+                    {puzzle_data.display_name.clone()}
+                </span>
+                <span class={valign_top}>
+                    <Tooltip content={"Copy permalink to puzzle"} alignment={TooltipAlignment::Right}>
+                        <CopyButton content={puzzle_uuid_url.as_str().to_string()} />
+                    </Tooltip>
+                </span>
+            </div>
+        </>
+    }
 }
 
 #[function_component(CreatePuzzle)]

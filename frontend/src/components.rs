@@ -6,3 +6,4 @@ pub mod login;
 pub mod puzzle;
 pub mod role;
 pub mod user;
+pub mod utility;
