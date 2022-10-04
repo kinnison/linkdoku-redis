@@ -10,10 +10,10 @@ use yew_bulma_tabs::{TabContent, Tabbed};
 
 use crate::render::MarkdownRender;
 
-#[derive(Properties, PartialEq, Eq)]
+#[derive(Properties, PartialEq)]
 pub struct MarkdownEditorProps {
-    pub name: String,
     pub initial: String,
+    pub onchange: Option<Callback<String>>,
 }
 
 #[function_component(MarkdownEditor)]
@@ -25,9 +25,13 @@ pub fn markdown_editor(props: &MarkdownEditorProps) -> Html {
     let onchange = {
         let setter = markdown.clone();
         let editor = editor.clone();
+        let parent_onchange = props.onchange.clone();
         Callback::from(move |_| {
             let editor: HtmlTextAreaElement = editor.cast().unwrap();
             let value = editor.value();
+            if let Some(cb) = &parent_onchange {
+                cb.emit(value.clone());
+            }
             setter.set(value);
         })
     };
@@ -45,7 +49,7 @@ pub fn markdown_editor(props: &MarkdownEditorProps) -> Html {
     html! {
         <Tabbed default={"Write"}>
             <TabContent title={"Write"}>
-                <textarea ref={editor} onchange={onchange} oninput={oninput} class={"textarea is-family-code"} name={props.name.clone()} value={(*markdown).clone()} />
+                <textarea ref={editor} onchange={onchange} oninput={oninput} class={"textarea is-family-code"} value={(*markdown).clone()} />
             </TabContent>
             <TabContent title={"Preview"}>
                 <MarkdownRender markdown={(*markdown).clone()} />

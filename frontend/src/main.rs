@@ -21,7 +21,8 @@ use components::login::{LoginStatus, UserProvider};
 
 use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
-use crate::components::role::Role;
+use crate::components::puzzle::*;
+use crate::components::role::*;
 
 use yew_markdown::editor::MarkdownEditor;
 
@@ -31,6 +32,16 @@ enum Route {
     Root,
     #[at("/-/complete-login")]
     CompleteLogin,
+    #[at("/-/role")]
+    DefaultRoleRedirect,
+    #[at("/-/role/:role")]
+    RolePage { role: String },
+    #[at("/-/puzzle")]
+    NoPuzzleRedirect,
+    #[at("/-/puzzle/create")]
+    CreatePuzzle,
+    #[at("/-/puzzle/:puzzle")]
+    PuzzlePage { puzzle: String },
     #[at("/-/utils/lz")]
     LZPage,
     #[not_found]
@@ -175,11 +186,22 @@ fn show_not_found() -> Html {
 }
 
 fn switch(route: &Route) -> Html {
-    match route {
+    let page_html = match route {
         Route::Root => html! { <LoginStateShow /> },
         Route::CompleteLogin => html! { <HandleLoginFlow /> },
         Route::NotFound => html! { <ShowNotFound /> },
         Route::LZPage => html! { <LZPage /> },
+        Route::DefaultRoleRedirect => html! { <DefaultRoleRedirect /> },
+        Route::RolePage { role } => html! { <RolePage role={role.clone()} /> },
+        Route::NoPuzzleRedirect => html! { <NoPuzzleRedirect /> },
+        Route::CreatePuzzle => html! { <CreatePuzzle /> },
+        Route::PuzzlePage { puzzle } => html! { <PuzzlePage puzzle={puzzle.clone()} /> },
+    };
+
+    html! {
+        <div class={"block mt-4 mx-4"}>
+            {page_html}
+        </div>
     }
 }
 
@@ -244,7 +266,7 @@ Perhaps you want to try a [reference link][rl] instead?
                     <br />
                     <button class={"button is-primary"} onclick={utility}>{"LZ Utility"}</button>
                     <br />
-                    <MarkdownEditor name={"markdown"} initial={MARKDOWN} />
+                    <MarkdownEditor initial={MARKDOWN} />
                 </div>
             }
         }

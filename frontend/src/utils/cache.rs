@@ -1,7 +1,7 @@
 //! Cache provision for Linkdoku
 //!
 
-use std::{future::Future, time::Duration};
+use std::{fmt::Debug, future::Future, time::Duration};
 
 use gloo::storage::{LocalStorage, Storage};
 use js_sys::Date;
@@ -28,11 +28,34 @@ pub struct CacheEntryWithExpiry<T> {
 #[derive(Clone, PartialEq, Eq)]
 pub struct ObjectCache;
 
-#[derive(Clone, PartialEq, Eq)]
-pub enum CacheEntry<V: Clone + PartialEq> {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum CacheEntry<V>
+where
+    V: Clone + PartialEq + Debug,
+{
     Pending,
     Missing,
     Value(V),
+}
+
+impl<V> CacheEntry<V>
+where
+    V: Clone + PartialEq + Debug,
+{
+    pub fn is_pending(&self) -> bool {
+        matches!(self, Self::Pending)
+    }
+
+    pub fn is_missing(&self) -> bool {
+        matches!(self, Self::Missing)
+    }
+
+    pub fn value(&self) -> Option<&V> {
+        match self {
+            Self::Value(v) => Some(v),
+            _ => None,
+        }
+    }
 }
 
 #[function_component(ObjectCacheProvider)]
@@ -114,14 +137,14 @@ impl ObjectCache {
         )
     }
 
-    pub fn cached_role(&self, uuid: &str) -> UseStateHandle<CacheEntry<RoleData>> {
+    pub fn cached_role(&self, uuid_or_short_name: &str) -> UseStateHandle<CacheEntry<RoleData>> {
         let lifetime = ROLE_CACHE_LIFETIME;
         let cache = use_context::<ObjectCache>().expect("Cache not extant!");
         let state = use_state_eq(|| CacheEntry::Pending);
         let client = use_context::<ReqwestClient>().expect("No API client");
-        let key = format!("role:{}", uuid);
+        let key = format!("role:{}", uuid_or_short_name);
         let async_handle: UseAsyncHandle<Option<RoleData>, crate::components::core::APIError> = {
-            let api_url = use_api_url(&format!("/role/get/{}", uuid));
+            let api_url = use_api_url(&format!("/role/get/{}", uuid_or_short_name));
             cache.use_cached_value(&key, lifetime, async move {
                 let out: Option<RoleData> =
                     make_api_call(client, api_url.as_str(), None, NO_BODY).await?;
@@ -134,8 +157,13 @@ impl ObjectCache {
                 let state = state.clone();
                 move |handle: &UseAsyncHandle<Option<RoleData>, APIError>| {
                     if !handle.loading {
+                        gloo::console::log!(format!(
+                            "Cached role callback, handle data returned {:?}",
+                            handle.data
+                        ));
                         match &handle.data {
-                            Some(None) | None => state.set(CacheEntry::Missing),
+                            None => state.set(CacheEntry::Pending),
+                            Some(None) => state.set(CacheEntry::Missing),
                             Some(Some(value)) => state.set(CacheEntry::Value(value.clone())),
                         }
                     }
