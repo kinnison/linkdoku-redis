@@ -162,7 +162,7 @@ impl Database {
             .key(format!("puzzle:{}", uuid))
             .key("puzzle:byname")
             .key(format!("role:{}:puzzles", puzzle.owner()))
-            .arg(uuid)
+            .arg(uuid.clone())
             .arg(puzzle.owner())
             .arg(short_name)
             .arg(puzzle.display_name())
@@ -173,8 +173,8 @@ impl Database {
             })
             .arg(puzzle.visibility_date().unwrap_or(""))
             .arg(Puzzle::compress_states(puzzle.states()));
-
-        Ok(invocation.invoke_async(&mut self.conn).await?)
+        invocation.invoke_async(&mut self.conn).await?;
+        Ok(uuid)
     }
 
     pub async fn puzzle_by_uuid(&mut self, uuid: &str) -> DatabaseResult<Puzzle> {
