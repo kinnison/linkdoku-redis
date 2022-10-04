@@ -332,6 +332,9 @@ pub fn create_puzzle() -> Html {
         }
     };
 
+    drop(state);
+    drop(history);
+
     html! {
         <>
             <p class={"title is-1"}>
