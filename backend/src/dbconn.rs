@@ -2,7 +2,11 @@
 //!
 //!
 
-use std::{error::Error, fmt::Display};
+use std::{
+    error::Error,
+    fmt::Display,
+    time::{Duration, SystemTime},
+};
 
 use axum::Extension;
 use redis::{aio::ConnectionManager, Client, Cmd, RedisError, Script};
@@ -185,7 +189,13 @@ impl Database {
                 Visibility::Published => "published",
             })
             .arg(puzzle.visibility_date().unwrap_or(""))
-            .arg(Puzzle::compress_states(puzzle.states()));
+            .arg(Puzzle::compress_states(puzzle.states()))
+            .arg(
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_else(|_| Duration::from_secs(0))
+                    .as_secs(),
+            );
         invocation.invoke_async(&mut self.conn).await?;
         Ok(uuid)
     }
