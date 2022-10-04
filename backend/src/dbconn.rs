@@ -115,14 +115,27 @@ impl Database {
         Ok(invocation.invoke_async(&mut self.conn).await?)
     }
 
-    pub async fn role_by_uuid(&mut self, uuid: &str) -> DatabaseResult<Role> {
+    pub async fn role_by_uuid_or_short_name(
+        &mut self,
+        uuid_or_short_name: &str,
+    ) -> DatabaseResult<Role> {
+        let uuid = if Self::smells_like_uuid(uuid_or_short_name) {
+            uuid_or_short_name.to_string()
+        } else {
+            Cmd::hget("role:byname", uuid_or_short_name)
+                .query_async(&mut self.conn)
+                .await?
+        };
         let kvs: Vec<String> = Cmd::hgetall(format!("role:{}", uuid))
             .query_async(&mut self.conn)
             .await?;
         if kvs.is_empty() {
-            Err(DatabaseError::NotFound(format!("role:{}", uuid)))
+            Err(DatabaseError::NotFound(format!(
+                "role:{}",
+                uuid_or_short_name
+            )))
         } else {
-            Ok(Role::from_list(uuid, kvs.into_iter()))
+            Ok(Role::from_list(&uuid, kvs.into_iter()))
         }
     }
     pub async fn create_default_role(&mut self, identity: &Identity) -> DatabaseResult<()> {
@@ -186,5 +199,12 @@ impl Database {
         } else {
             Ok(Puzzle::from_list(uuid, kvs.into_iter()))
         }
+    }
+}
+
+// Utility functions
+impl Database {
+    fn smells_like_uuid(maybe_uuid: &str) -> bool {
+        (maybe_uuid.len() == 32) && maybe_uuid.bytes().all(|b| b"0123456789abcdef".contains(&b))
     }
 }

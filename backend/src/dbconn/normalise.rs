@@ -3,6 +3,11 @@ use super::DatabaseResult;
 
 use redis::Cmd;
 
+/// Reserved short names which are not permitted for convenience / clarity reasons
+const RESERVED_SHORT_NAMES: &[&str] = &[
+    "api", "-", "linkdoku", "r", "p", "role", "puzzle", "create", "delete", "rename",
+];
+
 /// Normalise a short name name, and ensure it is unique.
 /// Note: this is no guarantee of uniqueness by the time you get to the server later, but it's
 /// a good way to ensure nothing unusual happens.
@@ -18,7 +23,6 @@ pub async fn unique_short_name(
     // Next, we remove anything which isn't `-`, `_`, `.`, a letter, or a digit
     short_name.retain(|c| "abcdefghijklmnopqrstuvwxyz0123456789-_.".contains(c));
     // Now we take the role name and if it's a reserved word we add an underscore afterwards
-    const RESERVED_SHORT_NAMES: &[&str] = &["api", "-", "linkdoku", "r", "p"];
     if RESERVED_SHORT_NAMES.iter().any(|&s| s == short_name) {
         short_name.push('_');
     }

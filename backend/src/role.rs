@@ -3,12 +3,12 @@ use linkdoku_common::RoleData;
 
 use crate::dbconn::{Database, DatabaseError};
 
-async fn role_by_uuid(
+async fn role_by_uuid_or_short_name(
     Path(role): Path<String>,
     Extension(mut dbconn): Extension<Database>,
 ) -> Json<Option<RoleData>> {
     tracing::info!("Looking for role: {}", role);
-    match dbconn.role_by_uuid(&role).await {
+    match dbconn.role_by_uuid_or_short_name(&role).await {
         Ok(role) => {
             tracing::info!("Found role: {:?}", role);
             Json::from(Some(RoleData {
@@ -31,5 +31,5 @@ async fn role_by_uuid(
 }
 
 pub fn router() -> Router {
-    Router::new().route("/get/:role", get(role_by_uuid))
+    Router::new().route("/get/:role", get(role_by_uuid_or_short_name))
 }
