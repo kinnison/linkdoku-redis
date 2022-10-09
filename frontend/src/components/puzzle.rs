@@ -108,6 +108,10 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
         puzzle: puzzle_data.uuid.clone(),
     });
 
+    let puzzle_short_name_url = use_page_url(Route::PuzzlePage {
+        puzzle: puzzle_data.short_name.clone(),
+    });
+
     let valign_top = use_style("vertical-align: top;");
 
     html! {
@@ -117,8 +121,11 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
                     {puzzle_data.display_name.clone()}
                 </span>
                 <span class={valign_top}>
+                    <Tooltip content={"Copy link to puzzle"} alignment={TooltipAlignment::Right}>
+                        <CopyButton content={puzzle_short_name_url.as_str().to_string()} />
+                    </Tooltip>
                     <Tooltip content={"Copy permalink to puzzle"} alignment={TooltipAlignment::Right}>
-                        <CopyButton content={puzzle_uuid_url.as_str().to_string()} />
+                        <CopyButton content={puzzle_uuid_url.as_str().to_string()} icon={"hashtag"}/>
                     </Tooltip>
                 </span>
             </div>
