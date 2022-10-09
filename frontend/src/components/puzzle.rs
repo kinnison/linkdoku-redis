@@ -2,10 +2,10 @@
 //!
 
 use linkdoku_common::Rating;
-use stylist::yew::*;
+use stylist::{style, yew::*};
 use yew::prelude::*;
 use yew_hooks::prelude::*;
-use yew_markdown::editor::MarkdownEditor;
+use yew_markdown::{editor::MarkdownEditor, render::MarkdownRender};
 use yew_router::prelude::*;
 use yew_toastrack::*;
 
@@ -36,6 +36,80 @@ pub struct CreatePuzzleState {
 pub fn no_puzzle_redirect() -> Html {
     use_history().expect("no history?").replace(Route::Root);
     html! {}
+}
+
+#[derive(Properties, PartialEq)]
+pub struct PuzzleRatingProps {
+    pub value: Rating,
+    pub onclick: Option<Callback<Rating>>,
+}
+
+#[styled_component(PuzzleRating)]
+pub fn puzzle_rating(props: &PuzzleRatingProps) -> Html {
+    let tutorial_icon = html! {
+        <i class={"fas fa-solid fa-graduation-cap"} />
+    };
+    let star_icon = html! {
+        <i class={"fas fa-solid fa-star"} />
+    };
+
+    use Rating::*;
+
+    let render_value = use_state(|| props.value);
+
+    let mouseleave = Callback::from({
+        let setter = render_value.setter();
+        let reset = props.value;
+        move |_| {
+            setter.set(reset);
+        }
+    });
+
+    let draw_icon = |on: bool, icon: Html, rating: Rating| {
+        let onmouseover = if props.onclick.is_some() {
+            let setter = render_value.setter();
+            Some(Callback::from(move |_| {
+                setter.set(rating);
+            }))
+        } else {
+            None
+        };
+        let onclick = if let Some(onclick) = &props.onclick {
+            let onclick = onclick.clone();
+            Some(Callback::from(move |_| onclick.emit(rating)))
+        } else {
+            None
+        };
+        html! {
+            <span class={if on { "icon has-text-success"} else { "icon" }} onmouseover={onmouseover} onclick={onclick}>
+                {icon}
+            </span>
+        }
+    };
+
+    let outer_class = classes!(
+        "button",
+        style!("display: inline-block; height: auto;").unwrap()
+    );
+
+    let render_value = *render_value;
+    html! {
+        <div class={outer_class}>
+            <span onmouseleave={mouseleave}>
+                {draw_icon(matches!(render_value, Tutorial), tutorial_icon, Tutorial)}
+                {" | "}
+                {draw_icon(matches!(render_value, Beginner | Easy | Regular | Hard | VeryHard), star_icon.clone(), Beginner)}
+                {draw_icon(matches!(render_value,            Easy | Regular | Hard | VeryHard), star_icon.clone(), Easy)}
+                {draw_icon(matches!(render_value,                   Regular | Hard | VeryHard), star_icon.clone(), Regular)}
+                {draw_icon(matches!(render_value,                             Hard | VeryHard), star_icon.clone(), Hard)}
+                {draw_icon(matches!(render_value,                                    VeryHard), star_icon.clone(), VeryHard)}
+            </span>
+            <br />
+            <span>
+                {render_value.title()}
+            </span>
+        </div>
+    }
 }
 
 #[derive(Properties, PartialEq, Eq, Debug)]
@@ -83,6 +157,8 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
     // We have the role data, so let's render it
     let puzzle_data = puzzle_data.value().unwrap().clone();
 
+    let state_index = use_state(|| puzzle_data.states.len().checked_sub(1));
+
     // if it turns out we were invoked by UUID, redirect to short-name because it's nicer for copy/pasta
     if props.puzzle == puzzle_data.uuid {
         // check if the current history value shows the current puzzle by uuid too
@@ -113,6 +189,21 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
     });
 
     let valign_top = use_style("vertical-align: top;");
+    let valign_middle = use_style("vertical-align: middle;");
+
+    let current_state = state_index.map(|n| &puzzle_data.states[n]);
+
+    let rating = if let Some(state) = current_state {
+        html! {
+            <span class={valign_middle}>
+                <PuzzleRating value={state.setter_rating} />
+            </span>
+        }
+    } else {
+        html! {}
+    };
+
+    let description = current_state.map(|s| s.description.as_str()).unwrap_or("");
 
     html! {
         <>
@@ -128,6 +219,8 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
                         <CopyButton content={puzzle_uuid_url.as_str().to_string()} icon={"hashtag"}/>
                     </Tooltip>
                 </span>
+                {rating}
+                <MarkdownRender markdown={description.to_string()} />
             </div>
         </>
     }
@@ -296,38 +389,22 @@ pub fn create_puzzle() -> Html {
     };
 
     let rating_control = {
-        let selector = use_node_ref();
-
-        let ratings = Rating::values()
-            .iter().copied()
-            .map(|rating| {
-                html! {
-                    <option value={rating.value()} selected={rating == state.rating}>{rating.title()}</option>
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let rating_changed = Callback::from({
-            let selector = selector.clone();
+        let rating_click = Callback::from({
             let state = state.clone();
-            move |_| {
-                let selector: HtmlSelectElement = selector.cast().unwrap();
+            move |rating| {
                 let mut new_state = (*state).clone();
-                new_state.rating = Rating::from_value(&selector.value());
+                new_state.rating = rating;
                 state.set(new_state);
             }
         });
+
         html! {
             <div class={"field"}>
                 <label class={"label"}>
-                    {"Puzzle rating"}
+                    {"Estimated (setter) puzzle rating"}
                 </label>
                 <div class={"control"}>
-                    <div class={"select"}>
-                        <select ref={selector} onchange={rating_changed}>
-                            {ratings}
-                        </select>
-                    </div>
+                    <PuzzleRating value={state.rating} onclick={rating_click}/>
                 </div>
             </div>
         }
