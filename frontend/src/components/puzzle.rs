@@ -1,9 +1,11 @@
 //! Puzzle related stuff
 //!
 
-use linkdoku_common::Rating;
+use linkdoku_common::{PuzzleData, PuzzleState, Rating, UrlEntry};
+use serde_json::{json, Value};
 use stylist::{style, yew::*};
 use yew::prelude::*;
+use yew_bulma_tabs::{TabContent, Tabbed};
 use yew_hooks::prelude::*;
 use yew_markdown::{editor::MarkdownEditor, render::MarkdownRender};
 use yew_router::prelude::*;
@@ -28,8 +30,7 @@ pub struct CreatePuzzleState {
     pub owner: String,
     pub short_name: String,
     pub display_name: String,
-    pub description: String,
-    pub rating: Rating,
+    pub puzzle_state: PuzzleState,
 }
 
 #[function_component(NoPuzzleRedirect)]
@@ -226,6 +227,200 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
     }
 }
 
+#[derive(Properties, PartialEq)]
+struct PuzzleStateEditorProps {
+    initial: PuzzleState,
+    changed: Callback<PuzzleState>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum EditorKind {
+    Nothing,
+    FPuzzles,
+    URLs,
+    Pack,
+}
+
+const KIND_TITLE_NOTHING: &str = "No data";
+const KIND_TITLE_FPUZZLES: &str = "F-Puzzles data";
+const KIND_TITLE_URLS: &str = "List of URLs";
+const KIND_TITLE_PACK: &str = "List of puzzles";
+
+impl EditorKind {
+    fn title(self) -> &'static str {
+        use EditorKind::*;
+        match self {
+            Nothing => KIND_TITLE_NOTHING,
+            FPuzzles => KIND_TITLE_FPUZZLES,
+            URLs => KIND_TITLE_URLS,
+            Pack => KIND_TITLE_PACK,
+        }
+    }
+
+    fn from_title(title: &str) -> Self {
+        use EditorKind::*;
+        match title {
+            KIND_TITLE_NOTHING => Nothing,
+            KIND_TITLE_FPUZZLES => FPuzzles,
+            KIND_TITLE_URLS => URLs,
+            KIND_TITLE_PACK => Pack,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[function_component(PuzzleStateEditor)]
+fn puzzle_state_editor(props: &PuzzleStateEditorProps) -> Html {
+    let fpuzzles_data = use_state(|| match &props.initial.data {
+        PuzzleData::FPuzzles(fpuzz) => Some(fpuzz.clone()),
+        _ => None,
+    });
+    let urls_data = use_state(|| match &props.initial.data {
+        PuzzleData::URLs(urls) => urls.clone(),
+        _ => Vec::new(),
+    });
+    let pack_data = use_state(|| match &props.initial.data {
+        PuzzleData::Pack(pack) => pack.clone(),
+        _ => Vec::new(),
+    });
+    let editor_kind = use_state(|| match props.initial.data {
+        PuzzleData::Nothing => EditorKind::Nothing,
+        PuzzleData::FPuzzles(_) => EditorKind::FPuzzles,
+        PuzzleData::URLs(_) => EditorKind::URLs,
+        PuzzleData::Pack(_) => EditorKind::Pack,
+    });
+
+    let description = use_state(|| props.initial.description.clone());
+    let setter_rating = use_state(|| props.initial.setter_rating);
+
+    use_effect_with_deps(
+        {
+            let visibility = props.initial.visibility;
+            let visibility_changed = props.initial.visibility_changed.clone();
+            let changed = props.changed.clone();
+
+            let empty_grid: Value = json!({
+                "size": 3,
+                "grid": [
+                    [{}, {}, {}],
+                    [{}, {}, {}],
+                    [{}, {}, {}],
+                ]
+            });
+
+            move |(
+                editor_kind,
+                fpuzzles_data,
+                urls_data,
+                pack_data,
+                description,
+                setter_rating,
+            ): &(
+                EditorKind,
+                Option<Value>,
+                Vec<UrlEntry>,
+                Vec<String>,
+                String,
+                Rating,
+            )| {
+                let new_state = PuzzleState {
+                    description: description.clone(),
+                    setter_rating: *setter_rating,
+                    visibility,
+                    visibility_changed,
+                    data: match editor_kind {
+                        EditorKind::Nothing => PuzzleData::Nothing,
+                        EditorKind::FPuzzles => PuzzleData::FPuzzles(
+                            fpuzzles_data.clone().unwrap_or_else(|| empty_grid.clone()),
+                        ),
+                        EditorKind::URLs => PuzzleData::URLs(urls_data.clone()),
+                        EditorKind::Pack => PuzzleData::Pack(pack_data.clone()),
+                    },
+                };
+                changed.emit(new_state);
+                || ()
+            }
+        },
+        (
+            (*editor_kind).clone(),
+            (*fpuzzles_data).clone(),
+            (*urls_data).clone(),
+            (*pack_data).clone(),
+            (*description).clone(),
+            (*setter_rating).clone(),
+        ),
+    );
+
+    let rating_control = {
+        let rating_click = Callback::from({
+            let setter_rating = setter_rating.clone();
+            move |rating| setter_rating.set(rating)
+        });
+
+        html! {
+            <div class={"field"}>
+                <label class={"label"}>
+                    {"Estimated (setter) puzzle rating"}
+                </label>
+                <div class={"control"}>
+                    <PuzzleRating value={*setter_rating} onclick={rating_click}/>
+                </div>
+            </div>
+        }
+    };
+
+    let description_control = {
+        let description_changed = Callback::from({
+            let description = description.clone();
+            move |new| {
+                description.set(new);
+            }
+        });
+        html! {
+            <div class={"field"}>
+                <label class={"label"}>
+                    {"Puzzle description"}
+                </label>
+                <div class={"control"}>
+                    <MarkdownEditor initial={(*description).clone()} onchange={description_changed} />
+                </div>
+            </div>
+        }
+    };
+
+    let puzzle_data_control = {
+        let tabchanged = Callback::from({
+            let editor_kind = editor_kind.clone();
+            move |title: String| {
+                editor_kind.set(EditorKind::from_title(&title));
+            }
+        });
+
+        html! {
+            <div class={"field"}>
+                <label class={"label"}>
+                    {"Puzzle data"}
+                </label>
+                <div class={"control"}>
+                    <Tabbed default={editor_kind.title()} tabchanged={tabchanged}>
+                        <TabContent title={EditorKind::Nothing.title()}>
+                            <span class={"title"}>{"No extra data"}</span>
+                        </TabContent>
+                    </Tabbed>
+                </div>
+            </div>
+        }
+    };
+
+    html! {
+        <>
+            {rating_control}
+            {description_control}
+            {puzzle_data_control}
+        </>
+    }
+}
+
 #[function_component(CreatePuzzle)]
 pub fn create_puzzle() -> Html {
     let cache = use_context::<ObjectCache>().expect("No cache?");
@@ -367,46 +562,17 @@ pub fn create_puzzle() -> Html {
         }
     };
 
-    let description_control = {
-        let description_changed = Callback::from({
+    let puzzle_data_control = {
+        let state_changed = Callback::from({
             let state = state.clone();
-            move |content| {
+            move |new_puzzle_state| {
                 let mut new_state = (*state).clone();
-                new_state.description = content;
+                new_state.puzzle_state = new_puzzle_state;
                 state.set(new_state);
             }
         });
         html! {
-            <div class={"field"}>
-                <label class={"label"}>
-                    {"Puzzle description"}
-                </label>
-                <div class={"control"}>
-                    <MarkdownEditor initial={state.description.clone()} onchange={description_changed} />
-                </div>
-            </div>
-        }
-    };
-
-    let rating_control = {
-        let rating_click = Callback::from({
-            let state = state.clone();
-            move |rating| {
-                let mut new_state = (*state).clone();
-                new_state.rating = rating;
-                state.set(new_state);
-            }
-        });
-
-        html! {
-            <div class={"field"}>
-                <label class={"label"}>
-                    {"Estimated (setter) puzzle rating"}
-                </label>
-                <div class={"control"}>
-                    <PuzzleRating value={state.rating} onclick={rating_click}/>
-                </div>
-            </div>
+            <PuzzleStateEditor initial={state.puzzle_state.clone()} changed={state_changed}/>
         }
     };
 
@@ -424,9 +590,7 @@ pub fn create_puzzle() -> Html {
             let state = state.clone();
             let history = history.clone();
             move |_| {
-                use linkdoku_common::{
-                    CreatePuzzleResponse, Puzzle, PuzzleData, PuzzleState, Visibility,
-                };
+                use linkdoku_common::{CreatePuzzleResponse, Puzzle, Visibility};
                 let button: HtmlButtonElement = button_ref.cast().unwrap();
                 button.set_class_name(pending_classes);
                 let puzzle = Puzzle {
@@ -436,13 +600,7 @@ pub fn create_puzzle() -> Html {
                     display_name: state.display_name.clone(),
                     visibility: Visibility::Restricted,
                     visibility_changed: None,
-                    states: vec![PuzzleState {
-                        description: state.description.clone(),
-                        setter_rating: state.rating,
-                        data: PuzzleData::Nothing,
-                        visibility: Visibility::Restricted,
-                        visibility_changed: None,
-                    }],
+                    states: vec![state.puzzle_state.clone()],
                 };
                 let client = client.clone();
                 let create_puzzle_url = create_puzzle_url.clone();
@@ -507,8 +665,7 @@ pub fn create_puzzle() -> Html {
             {owner_control}
             {short_name_control}
             {display_name_control}
-            {rating_control}
-            {description_control}
+            {puzzle_data_control}
             {create_puzzle_button}
         </>
     }

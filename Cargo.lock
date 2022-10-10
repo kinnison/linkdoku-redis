@@ -1010,6 +1010,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "yew",
+ "yew-bulma-tabs",
  "yew-hooks",
  "yew-markdown",
  "yew-router",
