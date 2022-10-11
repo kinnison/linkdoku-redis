@@ -23,6 +23,7 @@ use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
 use crate::components::puzzle::*;
 use crate::components::role::*;
+use crate::utils::urlbits::extract_fpuzzles_data;
 
 use yew_markdown::editor::MarkdownEditor;
 
@@ -291,58 +292,14 @@ fn show_lz_page() -> Html {
                 textarea.cast::<HtmlTextAreaElement>(),
             ) {
                 let input_str = input.value();
-                let nums: Vec<_> = input_str
-                    .bytes()
-                    .flat_map(|b| {
-                        DICTIONARY
-                            .iter()
-                            .enumerate()
-                            .find(|&v| *v.1 == b)
-                            .map(|v| v.0 as u32)
-                    })
-                    .collect();
-                if let Some(decomp) = lz_str::decompress(&nums, 6) {
-                    match serde_json::from_str::<Value>(&decomp) {
-                        Ok(v) => {
-                            let s =
-                                serde_json::to_string_pretty(&v).expect("Can't re-serialise JSON");
-                            textarea.set_value(&s);
-                        }
-                        Err(e) => {
-                            textarea.set_value(&format!(
-                                "Unable to read compressed JSON: {:?}\n\n'{}'",
-                                e, decomp
-                            ));
-                        }
-                    }
+                if let Some(v) = extract_fpuzzles_data(&input_str) {
+                    let s = serde_json::to_string_pretty(&v).expect("Can't re-serialise JSON");
+                    textarea.set_value(&s);
                 } else {
-                    textarea.set_value(&format!("Unable to decompress: {}", input.value()));
-                }
-            }
-        })
-    };
-
-    let compress_action = {
-        let lz_input = lz_input.clone();
-        let textarea = textarea.clone();
-        Callback::from(move |_| {
-            if let (Some(input), Some(textarea)) = (
-                lz_input.cast::<HtmlInputElement>(),
-                textarea.cast::<HtmlTextAreaElement>(),
-            ) {
-                match serde_json::from_str::<Value>(&textarea.value()) {
-                    Ok(v) => {
-                        let squished = serde_json::to_string(&v).unwrap();
-                        let compressed = lz_str::compress(&squished, 6, |v| {
-                            *DICTIONARY.get(v as usize).unwrap() as u32
-                        });
-                        let nums: String =
-                            compressed.into_iter().map(|v| v as u8 as char).collect();
-                        input.set_value(&nums);
-                    }
-                    Err(e) => {
-                        input.set_value(&format!("Unable to parse JSON: {:?}", e));
-                    }
+                    textarea.set_value(&format!(
+                        "Unable to find or decompress from: {}",
+                        input.value()
+                    ));
                 }
             }
         })
@@ -364,7 +321,6 @@ fn show_lz_page() -> Html {
             </div>
             <div class={"buttons"}>
                 <button class={"button"} onclick={decompress_action}>{"Decompress"}</button>
-                <button class={"button"} onclick={compress_action}>{"Compress"}</button>
             </div>
         </div>
     }

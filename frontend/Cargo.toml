@@ -17,7 +17,7 @@ serde = { version = "1", features = ["derive"] }
 md5 = "0.7"
 url = "2.2"
 thiserror = "1.0"
-lz-str = "0.1"
+lz-str = { git = "https://github.com/dclamage/lz-str-rs" }
 web-sys = { version = "0.3", features = [
     "HtmlLinkElement",
     "HtmlSelectElement",

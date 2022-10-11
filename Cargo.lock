@@ -1054,8 +1054,7 @@ dependencies = [
 [[package]]
 name = "lz-str"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a081ef1e55c0f1fef4a0a0c48ad7a3acbc1a0f3881c27c090f8ed48156d5b8c"
+source = "git+https://github.com/dclamage/lz-str-rs#ddd7a9aeee6a7601680de193f65cce3115de67ac"
 
 [[package]]
 name = "lzma-sys"
