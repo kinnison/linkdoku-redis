@@ -21,7 +21,10 @@ use crate::{
         login::LoginStatus,
         utility::{CopyButton, Tooltip, TooltipAlignment},
     },
-    utils::cache::{CacheEntry, ObjectCache},
+    utils::{
+        cache::{CacheEntry, ObjectCache},
+        urlbits::extract_fpuzzles_data,
+    },
     Route,
 };
 
@@ -228,6 +231,33 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
 }
 
 #[derive(Properties, PartialEq)]
+struct FPuzzlesDataRender {
+    data: Value,
+}
+
+#[function_component(FPuzzlesRenderer)]
+fn fpuzzles_renderer(props: &FPuzzlesDataRender) -> Html {
+    let grid_size = props.data.get("size").and_then(Value::as_i64).unwrap_or(9);
+    let title = props.data.get("title").and_then(Value::as_str);
+    let author = props.data.get("author").and_then(Value::as_str);
+    let ruleset = props.data.get("ruleset").and_then(Value::as_str);
+    let has_solution = props.data.get("solution").is_some();
+
+    html! {
+        <table class={"table"}>
+        <thead> </thead>
+        <tbody>
+            <tr><th>{"Grid size"}</th><td>{format!("{}x{}", grid_size, grid_size)}</td></tr>
+            <tr><th>{"Title"}</th><td>{title.unwrap_or("No embedded title").to_string()}</td></tr>
+            <tr><th>{"Author"}</th><td>{author.unwrap_or("No embedded author").to_string()}</td></tr>
+            <tr><th>{"Ruleset"}</th><td>{if ruleset.is_some() { "Provided" } else { "Not provided" }}</td></tr>
+            <tr><th>{"Solution"}</th><td>{if has_solution { "Provided" } else { "Not provided" }}</td></tr>
+        </tbody>
+        </table>
+    }
+}
+
+#[derive(Properties, PartialEq)]
 struct PuzzleStateEditorProps {
     initial: PuzzleState,
     changed: Callback<PuzzleState>,
@@ -388,6 +418,45 @@ fn puzzle_state_editor(props: &PuzzleStateEditorProps) -> Html {
         }
     };
 
+    let fpuzzles_tab_content = {
+        fn render_puzzle_data(title: &'static str, data: Option<&Value>) -> Html {
+            if let Some(value) = data {
+                html! {
+                    <div class={"tile is-child notification is-success"}>
+                        <p class={"title"}>{title}</p>
+                        <FPuzzlesRenderer data={value.clone()} />
+                    </div>
+                }
+            } else {
+                html! {
+                    <div class={"tile is-child notification is-danger"}>
+                        <p class={"title"}>{title}</p>
+                        <p class={"subtitle"}>{"No data"}</p>
+                    </div>
+                }
+            }
+        }
+
+        let clipboard = use_clipboard();
+        let clipboard_text = (*clipboard.text).clone();
+
+        let clipboard_puzzle = clipboard_text.and_then(|s| extract_fpuzzles_data(&s));
+
+        let onclick = Callback::from(move |_| clipboard.read_text());
+
+        html! {
+            <div class={"tile is-parent"}>
+                {render_puzzle_data("This puzzle", (*fpuzzles_data).as_ref())}
+                <div class={"tile"}>
+                    <span class={"icon"} onclick={onclick}>
+                        <i class={"fas fa-solid fa-rotate"} />
+                    </span>
+                </div>
+                {render_puzzle_data("Clipboard puzzle", clipboard_puzzle.as_ref())}
+            </div>
+        }
+    };
+
     let puzzle_data_control = {
         let tabchanged = Callback::from({
             let editor_kind = editor_kind.clone();
@@ -405,6 +474,9 @@ fn puzzle_state_editor(props: &PuzzleStateEditorProps) -> Html {
                     <Tabbed default={editor_kind.title()} tabchanged={tabchanged}>
                         <TabContent title={EditorKind::Nothing.title()}>
                             <span class={"title"}>{"No extra data"}</span>
+                        </TabContent>
+                        <TabContent title={EditorKind::FPuzzles.title()}>
+                            {fpuzzles_tab_content}
                         </TabContent>
                     </Tabbed>
                 </div>
