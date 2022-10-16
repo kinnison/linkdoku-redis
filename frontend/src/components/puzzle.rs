@@ -23,7 +23,7 @@ use crate::{
     },
     utils::{
         cache::{CacheEntry, ObjectCache},
-        urlbits::extract_fpuzzles_data,
+        urlbits::{extract_fpuzzles_data, grid_svg_url},
     },
     Route,
 };
@@ -235,7 +235,7 @@ struct FPuzzlesDataRender {
     data: Value,
 }
 
-#[function_component(FPuzzlesRenderer)]
+#[styled_component(FPuzzlesRenderer)]
 fn fpuzzles_renderer(props: &FPuzzlesDataRender) -> Html {
     let grid_size = props.data.get("size").and_then(Value::as_i64).unwrap_or(9);
     let title = props.data.get("title").and_then(Value::as_str);
@@ -243,17 +243,58 @@ fn fpuzzles_renderer(props: &FPuzzlesDataRender) -> Html {
     let ruleset = props.data.get("ruleset").and_then(Value::as_str);
     let has_solution = props.data.get("solution").is_some();
 
+    let obj_style = use_style!("width: 50vh; height: 50vh;");
+
+    enum FieldState {
+        Ok,
+        Warn,
+        Bad,
+    }
+
+    use FieldState::*;
+
+    fn show_field(key: &'static str, state: FieldState, value: String) -> Html {
+        let icon = match state {
+            Ok => html! {
+                <i class={"fas fa-solid fa-circle-check"} />
+            },
+            Warn => html! {
+                <i class={"fas fa-solid fa-triangle-exclamation"} />
+            },
+            Bad => html! {
+                <i class={"fas fa-solid fa-heart-crack"} />
+            },
+        };
+        html! {
+            <div class={"field"}>
+                <div class={"label"}>{key}</div>
+                <div class={"control has-icons-right"}>
+                    <input class={"input"} type={"text"} value={value} readonly={true} />
+                    <span class={"icon is-right"}>
+                        {icon}
+                    </span>
+                </div>
+            </div>
+        }
+    }
+
     html! {
-        <table class={"table"}>
-        <thead> </thead>
-        <tbody>
-            <tr><th>{"Grid size"}</th><td>{format!("{}x{}", grid_size, grid_size)}</td></tr>
-            <tr><th>{"Title"}</th><td>{title.unwrap_or("No embedded title").to_string()}</td></tr>
-            <tr><th>{"Author"}</th><td>{author.unwrap_or("No embedded author").to_string()}</td></tr>
-            <tr><th>{"Ruleset"}</th><td>{if ruleset.is_some() { "Provided" } else { "Not provided" }}</td></tr>
-            <tr><th>{"Solution"}</th><td>{if has_solution { "Provided" } else { "Not provided" }}</td></tr>
-        </tbody>
-        </table>
+        <div class={"tile is-ancestor"}>
+            <div class={"tile"}>
+                <div class={"tile is-parent is-vertical"}>
+                    <div class={"tile is-child"}>
+                        {show_field("Grid size", Ok, format!("{}x{}", grid_size, grid_size))}
+                        {show_field("Title", title.as_ref().map(|_| Ok).unwrap_or(Bad), title.unwrap_or("No embedded title").to_string())}
+                        {show_field("Author", author.as_ref().map(|_| Ok).unwrap_or(Bad), author.unwrap_or("No embedded author").to_string())}
+                        {show_field("Ruleset", ruleset.as_ref().map(|_| Ok).unwrap_or(Bad), ruleset.map(|_| "Provided").unwrap_or("Not provided").to_string())}
+                        {show_field("Solution", if has_solution { Ok } else { Warn }, (if has_solution { "Provided" } else { "Not provided" }).to_string())}
+                    </div>
+                </div>
+            </div>
+            <div class={"tile notification is-4"}>
+                <object type={"image/svg+xml"} data={grid_svg_url(&props.data)} class={obj_style}/>
+            </div>
+        </div>
     }
 }
 
@@ -372,12 +413,12 @@ fn puzzle_state_editor(props: &PuzzleStateEditorProps) -> Html {
             }
         },
         (
-            (*editor_kind).clone(),
+            (*editor_kind),
             (*fpuzzles_data).clone(),
             (*urls_data).clone(),
             (*pack_data).clone(),
             (*description).clone(),
-            (*setter_rating).clone(),
+            (*setter_rating),
         ),
     );
 
@@ -419,41 +460,66 @@ fn puzzle_state_editor(props: &PuzzleStateEditorProps) -> Html {
     };
 
     let fpuzzles_tab_content = {
-        fn render_puzzle_data(title: &'static str, data: Option<&Value>) -> Html {
+        fn render_puzzle_data(data: Option<&Value>) -> Html {
             if let Some(value) = data {
                 html! {
                     <div class={"tile is-child notification is-success"}>
-                        <p class={"title"}>{title}</p>
                         <FPuzzlesRenderer data={value.clone()} />
                     </div>
                 }
             } else {
                 html! {
                     <div class={"tile is-child notification is-danger"}>
-                        <p class={"title"}>{title}</p>
                         <p class={"subtitle"}>{"No data"}</p>
                     </div>
                 }
             }
         }
 
-        let clipboard = use_clipboard();
-        let clipboard_text = (*clipboard.text).clone();
+        let input_ref = use_node_ref();
 
-        let clipboard_puzzle = clipboard_text.and_then(|s| extract_fpuzzles_data(&s));
+        let update_callback = Callback::from({
+            let input_ref = input_ref.clone();
+            let setter = fpuzzles_data.setter();
+            move |_| {
+                let input: HtmlInputElement = input_ref.cast().unwrap();
+                let acquired = extract_fpuzzles_data(&input.value());
+                setter.set(acquired);
+            }
+        });
 
-        let onclick = Callback::from(move |_| clipboard.read_text());
+        let input_callback = Callback::from({
+            let input_ref = input_ref.clone();
+            let setter = fpuzzles_data.setter();
+            move |_| {
+                let input: HtmlInputElement = input_ref.cast().unwrap();
+                let acquired = extract_fpuzzles_data(&input.value());
+                setter.set(acquired);
+            }
+        });
 
         html! {
-            <div class={"tile is-parent"}>
-                {render_puzzle_data("This puzzle", (*fpuzzles_data).as_ref())}
-                <div class={"tile"}>
-                    <span class={"icon"} onclick={onclick}>
-                        <i class={"fas fa-solid fa-rotate"} />
-                    </span>
+            <>
+                <div class={"field"}>
+                    <label class={"label"}>
+                        {"Link to puzzle, or puzzle string"}
+                    </label>
+                    <div class={"control has-icons-left"}>
+                        <input ref={input_ref} class={"input"} type={"text"} placeholder="http://f-puzzles.com/?load=....." onchange={update_callback} oninput={input_callback} />
+                        <span class={"icon is-small is-left"}>
+                            <i class={"fas fa-link fa-solid"} />
+                        </span>
+                    </div>
                 </div>
-                {render_puzzle_data("Clipboard puzzle", clipboard_puzzle.as_ref())}
-            </div>
+                <div class={"field"}>
+                    <label class={"label"}>
+                        {"Decoded"}
+                    </label>
+                    <div class={"control"}>
+                        {render_puzzle_data(fpuzzles_data.as_ref())}
+                    </div>
+                </div>
+            </>
         }
     };
 

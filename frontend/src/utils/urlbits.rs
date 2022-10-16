@@ -71,3 +71,15 @@ pub fn extract_fpuzzles_data(input: &str) -> Option<Value> {
     // Not parseable as a recognisable URL, so try and just treat it as fpuzzles data raw
     maybe_decode_fpuzzles(input)
 }
+
+pub fn encode_fpuzzles_data(value: &Value) -> String {
+    let json_data = serde_json::to_string(value).expect("Odd, JSON encoding failed?");
+    lz_str::compress_to_base64(json_data.as_str())
+}
+
+pub fn grid_svg_url(value: &Value) -> String {
+    format!(
+        "https://api.sudokupad.com/thumbnail/fpuzzles{}_512x512.svg",
+        encode_fpuzzles_data(value)
+    )
+}
