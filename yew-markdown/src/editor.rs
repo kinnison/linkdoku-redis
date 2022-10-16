@@ -8,12 +8,13 @@ use web_sys::HtmlTextAreaElement;
 use yew::prelude::*;
 use yew_bulma_tabs::{TabContent, Tabbed};
 
-use crate::render::MarkdownRender;
+use crate::{render::MarkdownRender, xform::Transformer};
 
 #[derive(Properties, PartialEq)]
 pub struct MarkdownEditorProps {
     pub initial: String,
     pub onchange: Option<Callback<String>>,
+    pub transformer: Option<Transformer>,
 }
 
 #[function_component(MarkdownEditor)]
@@ -52,7 +53,7 @@ pub fn markdown_editor(props: &MarkdownEditorProps) -> Html {
                 <textarea ref={editor} onchange={onchange} oninput={oninput} class={"textarea is-family-code"} value={(*markdown).clone()} />
             </TabContent>
             <TabContent title={"Preview"}>
-                <MarkdownRender markdown={(*markdown).clone()} />
+                <MarkdownRender markdown={(*markdown).clone()} transformer={props.transformer.clone()} />
             </TabContent>
         </Tabbed>
     }

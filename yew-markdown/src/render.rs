@@ -1,11 +1,20 @@
 //! Markdown renderer
 
-use pulldown_cmark::{Alignment, Event, HeadingLevel, LinkType, Options, Parser, Tag};
+use pulldown_cmark::{
+    Alignment, BrokenLink, CowStr, Event, HeadingLevel, LinkType, Options, Parser, Tag,
+};
 use yew::prelude::*;
 
-#[derive(Properties, PartialEq, Eq)]
+use crate::xform::{TransformRequest, Transformer};
+
+#[derive(Properties, PartialEq)]
 pub struct MarkdownRenderProps {
     pub markdown: String,
+    pub transformer: Option<Transformer>,
+}
+
+fn bl_cb(link: BrokenLink<'_>) -> Option<(CowStr<'_>, CowStr<'_>)> {
+    Some((link.reference.clone(), link.reference.clone()))
 }
 
 #[function_component(MarkdownRender)]
@@ -23,7 +32,17 @@ pub fn render_markdown_block(props: &MarkdownRenderProps) -> Html {
     let mut in_table_head = true;
     let mut cell_index = 0;
 
-    let events = Parser::new_ext(&props.markdown, options);
+    let mut bl_cb = &bl_cb;
+
+    let events = Parser::new_with_broken_link_callback(
+        &props.markdown,
+        options,
+        if props.transformer.is_some() {
+            Some(&mut bl_cb)
+        } else {
+            None
+        },
+    );
 
     for event in events {
         match event {
@@ -178,20 +197,66 @@ pub fn render_markdown_block(props: &MarkdownRenderProps) -> Html {
                         }
                     }
                     Tag::Link(linktype, url, title) => {
-                        // TODO: We should implement some kind of link transformer eventually
                         let url = match linktype {
                             LinkType::Email => format!("mailto:{}", url),
                             _ => url.into_string(),
                         };
-                        html! {
-                            <a href={url} title={title.into_string()}>{content}</a>
-                        }
+                        let title = title.into_string();
+                        // TODO: We should implement some kind of link transformer eventually
+                        let replacement = if matches!(
+                            linktype,
+                            LinkType::ReferenceUnknown
+                                | LinkType::CollapsedUnknown
+                                | LinkType::ShortcutUnknown
+                        ) {
+                            gloo::console::log!(format!(
+                                "Woah, found an unknown link thingy: {} {}",
+                                url, title
+                            ));
+                            props.transformer.as_ref().and_then(|transformer| {
+                                transformer.transform(TransformRequest::Link {
+                                    url: url.clone(),
+                                    title: title.clone(),
+                                    content: content.clone(),
+                                })
+                            })
+                        } else {
+                            None
+                        };
+                        replacement.unwrap_or_else(|| {
+                            html! {
+                                <a href={url} title={title}>{content}</a>
+                            }
+                        })
                     }
-                    Tag::Image(_linktype, url, title) => {
+                    Tag::Image(linktype, url, title) => {
                         // TODO: We should implement some kind of image URL transformer eventually
-                        html! {
-                            <img src={url.into_string()} title={title.into_string()} />
-                        }
+                        let url = url.into_string();
+                        let title = title.into_string();
+                        let replacement = if matches!(
+                            linktype,
+                            LinkType::ReferenceUnknown
+                                | LinkType::CollapsedUnknown
+                                | LinkType::ShortcutUnknown
+                        ) {
+                            gloo::console::log!(format!(
+                                "Woah, found an unknown image thingy: {} {}",
+                                url, title
+                            ));
+                            props.transformer.as_ref().and_then(|transformer| {
+                                transformer.transform(TransformRequest::Image {
+                                    url: url.clone(),
+                                    title: title.clone(),
+                                })
+                            })
+                        } else {
+                            None
+                        };
+                        replacement.unwrap_or_else(|| {
+                            html! {
+                                <img src={url} title={title} />
+                            }
+                        })
                     }
                 };
                 inlines[stack_depth].push(new_content);
