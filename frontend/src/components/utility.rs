@@ -89,7 +89,7 @@ pub enum TooltipLevel {
 
 #[function_component(Tooltip)]
 pub fn tooltip_component(props: &TooltipProps) -> Html {
-    let mut classes = classes! {
+    let classes = classes! {
         match props.alignment {
             TooltipAlignment::Default => None,
             TooltipAlignment::Top => Some("has-tooltip-top"),

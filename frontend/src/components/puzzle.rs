@@ -7,7 +7,11 @@ use stylist::{style, yew::*};
 use yew::prelude::*;
 use yew_bulma_tabs::{TabContent, Tabbed};
 use yew_hooks::prelude::*;
-use yew_markdown::{editor::MarkdownEditor, render::MarkdownRender};
+use yew_markdown::{
+    editor::MarkdownEditor,
+    render::MarkdownRender,
+    xform::{TransformRequest, Transformer},
+};
 use yew_router::prelude::*;
 use yew_toastrack::*;
 
@@ -23,7 +27,7 @@ use crate::{
     },
     utils::{
         cache::{CacheEntry, ObjectCache},
-        urlbits::{extract_fpuzzles_data, grid_svg_url},
+        urlbits::{extract_fpuzzles_data, grid_svg_url, transform_markdown},
     },
     Route,
 };
@@ -209,6 +213,13 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
 
     let description = current_state.map(|s| s.description.as_str()).unwrap_or("");
 
+    let transformer = current_state.map(|state| {
+        Transformer::from({
+            let state = state.clone();
+            move |req| transform_markdown(&state, req)
+        })
+    });
+
     html! {
         <>
             <div class={"block"}>
@@ -224,7 +235,7 @@ pub fn puzzle_page(props: &PuzzlePageProps) -> Html {
                     </Tooltip>
                 </span>
                 {rating}
-                <MarkdownRender markdown={description.to_string()} />
+                <MarkdownRender markdown={description.to_string()} transformer={transformer}/>
             </div>
         </>
     }
@@ -447,13 +458,19 @@ fn puzzle_state_editor(props: &PuzzleStateEditorProps) -> Html {
                 description.set(new);
             }
         });
+
+        let transformer = Transformer::from({
+            let puzzle_state = props.initial.clone();
+            move |req| transform_markdown(&puzzle_state, req)
+        });
+
         html! {
             <div class={"field"}>
                 <label class={"label"}>
                     {"Puzzle description"}
                 </label>
                 <div class={"control"}>
-                    <MarkdownEditor initial={(*description).clone()} onchange={description_changed} />
+                    <MarkdownEditor initial={(*description).clone()} onchange={description_changed} transformer={Some(transformer)}/>
                 </div>
             </div>
         }
