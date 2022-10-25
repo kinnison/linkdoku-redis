@@ -1,7 +1,9 @@
+// Until Yew fixes this issue...
+#![allow(clippy::let_unit_value)]
+
 use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
-use serde_json::Value;
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
@@ -18,7 +20,9 @@ use components::login::{LoginStatus, UserProvider};
 
 use crate::components::core::use_api_url;
 use crate::components::login::{LoginStatusAction, LoginStatusDispatcher};
-use crate::components::role::Role;
+use crate::components::puzzle::*;
+use crate::components::role::*;
+use crate::utils::urlbits::extract_fpuzzles_data;
 
 use yew_markdown::editor::MarkdownEditor;
 
@@ -28,6 +32,16 @@ enum Route {
     Root,
     #[at("/-/complete-login")]
     CompleteLogin,
+    #[at("/-/role")]
+    DefaultRoleRedirect,
+    #[at("/-/role/:role")]
+    RolePage { role: String },
+    #[at("/-/puzzle")]
+    NoPuzzleRedirect,
+    #[at("/-/puzzle/create")]
+    CreatePuzzle,
+    #[at("/-/puzzle/:puzzle")]
+    PuzzlePage { puzzle: String },
     #[at("/-/utils/lz")]
     LZPage,
     #[not_found]
@@ -172,11 +186,22 @@ fn show_not_found() -> Html {
 }
 
 fn switch(route: &Route) -> Html {
-    match route {
+    let page_html = match route {
         Route::Root => html! { <LoginStateShow /> },
         Route::CompleteLogin => html! { <HandleLoginFlow /> },
         Route::NotFound => html! { <ShowNotFound /> },
         Route::LZPage => html! { <LZPage /> },
+        Route::DefaultRoleRedirect => html! { <DefaultRoleRedirect /> },
+        Route::RolePage { role } => html! { <RolePage role={role.clone()} /> },
+        Route::NoPuzzleRedirect => html! { <NoPuzzleRedirect /> },
+        Route::CreatePuzzle => html! { <CreatePuzzle /> },
+        Route::PuzzlePage { puzzle } => html! { <PuzzlePage puzzle={puzzle.clone()} /> },
+    };
+
+    html! {
+        <div class={"block mt-4 mx-4"}>
+            {page_html}
+        </div>
     }
 }
 
@@ -241,7 +266,7 @@ Perhaps you want to try a [reference link][rl] instead?
                     <br />
                     <button class={"button is-primary"} onclick={utility}>{"LZ Utility"}</button>
                     <br />
-                    <MarkdownEditor name={"markdown"} initial={MARKDOWN} />
+                    <MarkdownEditor initial={MARKDOWN} />
                 </div>
             }
         }
@@ -255,8 +280,6 @@ fn show_lz_page() -> Html {
     let lz_input = use_node_ref();
     let textarea = use_node_ref();
 
-    const DICTIONARY: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\\";
-
     let decompress_action = {
         let lz_input = lz_input.clone();
         let textarea = textarea.clone();
@@ -266,58 +289,14 @@ fn show_lz_page() -> Html {
                 textarea.cast::<HtmlTextAreaElement>(),
             ) {
                 let input_str = input.value();
-                let nums: Vec<_> = input_str
-                    .bytes()
-                    .flat_map(|b| {
-                        DICTIONARY
-                            .iter()
-                            .enumerate()
-                            .find(|&v| *v.1 == b)
-                            .map(|v| v.0 as u32)
-                    })
-                    .collect();
-                if let Some(decomp) = lz_str::decompress(&nums, 6) {
-                    match serde_json::from_str::<Value>(&decomp) {
-                        Ok(v) => {
-                            let s =
-                                serde_json::to_string_pretty(&v).expect("Can't re-serialise JSON");
-                            textarea.set_value(&s);
-                        }
-                        Err(e) => {
-                            textarea.set_value(&format!(
-                                "Unable to read compressed JSON: {:?}\n\n'{}'",
-                                e, decomp
-                            ));
-                        }
-                    }
+                if let Some(v) = extract_fpuzzles_data(&input_str) {
+                    let s = serde_json::to_string_pretty(&v).expect("Can't re-serialise JSON");
+                    textarea.set_value(&s);
                 } else {
-                    textarea.set_value(&format!("Unable to decompress: {}", input.value()));
-                }
-            }
-        })
-    };
-
-    let compress_action = {
-        let lz_input = lz_input.clone();
-        let textarea = textarea.clone();
-        Callback::from(move |_| {
-            if let (Some(input), Some(textarea)) = (
-                lz_input.cast::<HtmlInputElement>(),
-                textarea.cast::<HtmlTextAreaElement>(),
-            ) {
-                match serde_json::from_str::<Value>(&textarea.value()) {
-                    Ok(v) => {
-                        let squished = serde_json::to_string(&v).unwrap();
-                        let compressed = lz_str::compress(&squished, 6, |v| {
-                            *DICTIONARY.get(v as usize).unwrap() as u32
-                        });
-                        let nums: String =
-                            compressed.into_iter().map(|v| v as u8 as char).collect();
-                        input.set_value(&nums);
-                    }
-                    Err(e) => {
-                        input.set_value(&format!("Unable to parse JSON: {:?}", e));
-                    }
+                    textarea.set_value(&format!(
+                        "Unable to find or decompress from: {}",
+                        input.value()
+                    ));
                 }
             }
         })
@@ -339,7 +318,6 @@ fn show_lz_page() -> Html {
             </div>
             <div class={"buttons"}>
                 <button class={"button"} onclick={decompress_action}>{"Decompress"}</button>
-                <button class={"button"} onclick={compress_action}>{"Compress"}</button>
             </div>
         </div>
     }

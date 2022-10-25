@@ -20,6 +20,7 @@ pub fn tab_content(_props: &TabContentProps) -> Html {
 #[derive(Properties, PartialEq)]
 pub struct TabbedProps {
     pub default: String,
+    pub tabchanged: Option<Callback<String>>,
     pub children: ChildrenWithProps<TabContent>,
 }
 
@@ -37,6 +38,20 @@ pub fn tabbed(props: &TabbedProps) -> Html {
             .map(|(idx, _)| idx)
             .unwrap_or(0)
     });
+
+    use_effect_with_deps(
+        {
+            let tabs = tabs.clone();
+            let tabchanged = props.tabchanged.clone();
+            move |tabidx: &usize| {
+                if let Some(cb) = tabchanged.as_ref() {
+                    cb.emit(tabs[*tabidx].title.clone());
+                }
+                || ()
+            }
+        },
+        *current_tab,
+    );
 
     let outer_style = classes!("mx-2", "block");
 
@@ -60,7 +75,9 @@ pub fn tabbed(props: &TabbedProps) -> Html {
         .enumerate()
         .map(|(idx, tprops)| {
             let current_tab = current_tab.setter();
-            let set_tab = Callback::from(move |_| current_tab.set(idx));
+            let set_tab = Callback::from(move |_| {
+                current_tab.set(idx);
+            });
             if idx == current_idx {
                 html! {
                     <li class={"is-active"}>

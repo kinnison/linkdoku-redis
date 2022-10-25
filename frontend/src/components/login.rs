@@ -45,6 +45,27 @@ impl LoginStatus {
             },
         }
     }
+
+    pub fn is_unknown(&self) -> bool {
+        matches! {self, Self::Unknown}
+    }
+    pub fn is_logged_in(&self) -> bool {
+        matches! {self, Self::LoggedIn{..}}
+    }
+
+    pub fn roles(&self) -> &[String] {
+        match self {
+            Self::LoggedIn { roles, .. } => roles,
+            _ => &[],
+        }
+    }
+
+    pub fn current_role(&self) -> Option<&str> {
+        match self {
+            Self::LoggedIn { role, .. } => Some(role.as_str()),
+            _ => None,
+        }
+    }
 }
 
 pub enum LoginStatusAction {
