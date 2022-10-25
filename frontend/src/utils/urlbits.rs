@@ -135,7 +135,7 @@ pub fn transform_markdown(grid: &PuzzleState, req: TransformRequest) -> Transfor
                                     title
                                 };
                                 Some(html! {
-                                    <a href={ue.url.clone()} title={ue.title.clone()}>{content}</a>
+                                    <a href={ue.url.clone()} title={title.clone()}>{content}</a>
                                 })
                             } else {
                                 error(format!("URL index out of range: {}", num))
@@ -237,7 +237,7 @@ pub fn transform_markdown(grid: &PuzzleState, req: TransformRequest) -> Transfor
                 }
             }
         }
-        TransformRequest::Image { url, title } => {
+        TransformRequest::Image { url, .. } => {
             if url == "grid" {
                 if let PuzzleData::FPuzzles(grid) = &grid.data {
                     Some(html! {

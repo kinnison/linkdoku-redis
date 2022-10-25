@@ -61,6 +61,7 @@ pub struct TooltipProps {
     pub children: Children,
 }
 
+#[allow(dead_code)]
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum TooltipTextAlignment {
     Default,
@@ -68,6 +69,8 @@ pub enum TooltipTextAlignment {
     Centered,
     Right,
 }
+
+#[allow(dead_code)]
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum TooltipAlignment {
     Default,
@@ -77,6 +80,7 @@ pub enum TooltipAlignment {
     Right,
 }
 
+#[allow(dead_code)]
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum TooltipLevel {
     Normal,

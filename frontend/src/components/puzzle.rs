@@ -7,11 +7,7 @@ use stylist::{style, yew::*};
 use yew::prelude::*;
 use yew_bulma_tabs::{TabContent, Tabbed};
 use yew_hooks::prelude::*;
-use yew_markdown::{
-    editor::MarkdownEditor,
-    render::MarkdownRender,
-    xform::{TransformRequest, Transformer},
-};
+use yew_markdown::{editor::MarkdownEditor, render::MarkdownRender, xform::Transformer};
 use yew_router::prelude::*;
 use yew_toastrack::*;
 

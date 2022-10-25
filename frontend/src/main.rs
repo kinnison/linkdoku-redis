@@ -4,7 +4,6 @@
 use linkdoku_common::{BackendLoginStatus, LoginFlowResult};
 use reqwest::Url;
 use serde::Deserialize;
-use serde_json::Value;
 use yew::prelude::*;
 use yew::{function_component, html};
 use yew_router::prelude::*;
@@ -280,8 +279,6 @@ fn show_lz_page() -> Html {
 
     let lz_input = use_node_ref();
     let textarea = use_node_ref();
-
-    const DICTIONARY: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\\";
 
     let decompress_action = {
         let lz_input = lz_input.clone();
